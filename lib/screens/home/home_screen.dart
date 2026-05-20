@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'doctor_list_screen.dart';
+import '../doctor_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});

@@ -109,7 +109,7 @@ class AppTheme {
       prefixIconColor: AppColors.grey, // [cite: 31]
       suffixIconColor: AppColors.grey, // [cite: 31]
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 0, // [cite: 31]
       color: AppColors.cardLight, // [cite: 31]
       surfaceTintColor: Colors.transparent, // [cite: 31]
@@ -231,7 +231,7 @@ class AppTheme {
       prefixIconColor: AppColors.textSecondaryDark, // [cite: 38]
       suffixIconColor: AppColors.textSecondaryDark, // [cite: 38]
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 0, // [cite: 38]
       color: AppColors.cardDark, // [cite: 38]
       surfaceTintColor: Colors.transparent, // [cite: 38]

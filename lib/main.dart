@@ -1,21 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'core/theme/app_theme.dart';
+import 'core/providers/theme_provider.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/home/home_screen.dart';
 
 void main() {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const CarelyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class CarelyApp extends StatelessWidget {
+  const CarelyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Carely',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const LoginScreen(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, _) => MaterialApp(
+        title: 'Carely',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeProvider.themeMode,
+        home: const LoginScreen(),
+      ),
     );
   }
 }

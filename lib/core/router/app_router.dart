@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-// 🟢 Correction ici : Import absolu pour éviter le conflit de type de Dart
 import 'package:carely/core/services/auth_service.dart';
-
 import 'package:carely/screens/auth/login_screen.dart';
 import 'package:carely/screens/auth/register_screen.dart';
 import 'package:carely/screens/home/main_screen.dart';
@@ -14,6 +11,7 @@ import 'package:carely/screens/appointment/book_appointment_screen.dart';
 import 'package:carely/screens/appointment/my_appointments_screen.dart';
 import 'package:carely/screens/profile/profile_screen.dart';
 import 'package:carely/screens/admin/admin_screen.dart';
+import 'package:carely/screens/search/search_screen.dart';
 
 class AppRouter {
   static const _storage = FlutterSecureStorage();
@@ -30,6 +28,7 @@ class AppRouter {
         builder: (context, state, child) => MainScreen(child: child),
         routes: [
           GoRoute(path: '/', builder: (_, __) => const HomeTab()),
+          GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
           GoRoute(
             path: '/appointments',
             builder: (_, __) => const MyAppointmentsScreen(),

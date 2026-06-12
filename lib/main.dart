@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'core/theme/app_theme.dart';
+import 'core/database/database_helper.dart';
+import 'core/providers/consultant_provider.dart';
 import 'core/providers/theme_provider.dart';
+import 'core/repositories/consultant_repository.dart';
 import 'core/router/app_router.dart';
 import 'core/services/auth_service.dart';
+import 'core/theme/app_theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await DatabaseHelper.init();
   runApp(
     MultiProvider(
-      // ← MultiProvider au lieu de ChangeNotifierProvider
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => AuthService()), // ← ajouter
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(
+          lazy: false,
+          create: (_) => ConsultantProvider(ConsultantRepository()),
+        ),
       ],
       child: const CarelyApp(),
     ),

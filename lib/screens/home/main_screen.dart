@@ -9,8 +9,9 @@ class MainScreen extends StatelessWidget {
   int _selectedIndex(BuildContext context) {
     final loc = GoRouterState.of(context).uri.toString();
     if (loc == '/') return 0;
-    if (loc == '/appointments') return 1;
-    if (loc == '/profile') return 2;
+    if (loc == '/search') return 1;
+    if (loc == '/appointments') return 2;
+    if (loc == '/profile') return 3;
     return 0;
   }
 
@@ -26,8 +27,10 @@ class MainScreen extends StatelessWidget {
             case 0:
               context.go('/');
             case 1:
-              context.go('/appointments');
+              context.go('/search');
             case 2:
+              context.go('/appointments');
+            case 3:
               context.go('/profile');
           }
         },
@@ -36,6 +39,11 @@ class MainScreen extends StatelessWidget {
             icon: Icon(Icons.home_outlined),
             activeIcon: Icon(Icons.home),
             label: 'Accueil',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.search_outlined),
+            activeIcon: Icon(Icons.search),
+            label: 'Recherche',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today_outlined),

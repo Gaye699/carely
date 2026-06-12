@@ -8,13 +8,13 @@ const path = require('path');
 const db = new Database(path.join(__dirname, 'carely.db'));
 db.pragma('foreign_keys = ON');
 
-// ── Nettoyage ────────────────────────────────────────────────────────────────
+// Nettoyage
 db.prepare('DELETE FROM appointments').run();
 db.prepare('DELETE FROM time_slots').run();
 db.prepare('DELETE FROM doctors').run();
 db.prepare('DELETE FROM users').run();
 
-// ── Utilisateurs ─────────────────────────────────────────────────────────────
+// Utilisateurs
 const adminHash  = bcrypt.hashSync('Admin1234!', 12);
 const patientHash = bcrypt.hashSync('Demo1234!', 12);
 
@@ -24,7 +24,7 @@ db.prepare("INSERT INTO users (firstName, lastName, email, password, role) VALUE
 db.prepare("INSERT INTO users (firstName, lastName, email, password, role) VALUES (?, ?, ?, ?, ?)")
   .run('Jean', 'Patient', 'patient@carely.fr', patientHash, 'patient');
 
-// ── Médecins ─────────────────────────────────────────────────────────────────
+// Médecins
 const doctors = [
   {
     firstName: 'Martin', lastName: 'Leblanc', specialty: 'Cardiologue',
@@ -66,7 +66,7 @@ doctors.forEach((d) => {
   insertDoctor.run(d.firstName, d.lastName, d.specialty, d.description, d.address, d.city, d.phone, d.rating, d.reviewCount, d.price);
 });
 
-// ── Créneaux (7 prochains jours, heures de bureau) ───────────────────────────
+// Créneaux
 const insertSlot = db.prepare('INSERT OR IGNORE INTO time_slots (doctorId, dateTime) VALUES (?, ?)');
 const hours = [9, 10, 11, 14, 15, 16, 17];
 const now = new Date();
@@ -78,7 +78,6 @@ db.transaction(() => {
         const d = new Date(now);
         d.setDate(d.getDate() + day);
         d.setHours(h, 0, 0, 0);
-        // Format ISO sans fuseau : "2024-04-15T10:00:00"
         const iso = d.toISOString().slice(0, 19);
         insertSlot.run(doctorId, iso);
       });

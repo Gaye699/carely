@@ -1,3 +1,5 @@
 node_modules/
 .env
 carely.db
+carely.db-shm
+carely.db-wal

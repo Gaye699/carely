@@ -17,7 +17,7 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-// ── BASE DE DONNÉES ──────────────────────────────────────────────────────────
+// BASE DE DONNÉES
 
 const db = new Database(path.join(__dirname, 'carely.db'));
 db.pragma('journal_mode = WAL');
@@ -76,7 +76,7 @@ db.exec(`
   );
 `);
 
-// ── MIDDLEWARES ──────────────────────────────────────────────────────────────
+// MIDDLEWARES
 
 app.use(cors());
 app.use(express.json());
@@ -107,13 +107,13 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// ── HEALTH ───────────────────────────────────────────────────────────────────
+// HEALTH
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
-// ── AUTH ─────────────────────────────────────────────────────────────────────
+// AUTH
 
-// POST /api/auth/register  — issue #14
+// POST
 app.post('/api/auth/register', async (req, res) => {
   const { firstName, lastName, email, password, phone } = req.body;
 
@@ -146,7 +146,7 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
-// POST /api/auth/login  — issue #15
+// POST
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
 
@@ -172,7 +172,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   res.json({ token, user: safeUser });
 });
 
-// GET /api/auth/me
+// GET
 app.get('/api/auth/me', authenticate, (req, res) => {
   const user = db
     .prepare('SELECT id, firstName, lastName, email, role, phone, avatarUrl, createdAt FROM users WHERE id = ?')
@@ -181,7 +181,7 @@ app.get('/api/auth/me', authenticate, (req, res) => {
   res.json(user);
 });
 
-// PUT /api/users/avatar  — pour la feature photo de profil
+// PUT
 app.put('/api/users/avatar', authenticate, (req, res) => {
   const { avatarUrl } = req.body;
   if (!avatarUrl) return res.status(400).json({ error: 'avatarUrl requis' });
@@ -189,9 +189,9 @@ app.put('/api/users/avatar', authenticate, (req, res) => {
   res.json({ avatarUrl });
 });
 
-// ── DOCTORS ──────────────────────────────────────────────────────────────────
+// DOCTORS
 
-// GET /api/doctors?specialty=&search=
+// GET
 app.get('/api/doctors', authenticate, (req, res) => {
   const { specialty, search } = req.query;
   let query = 'SELECT * FROM doctors WHERE isActive = 1';
@@ -211,7 +211,7 @@ app.get('/api/doctors', authenticate, (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
-// GET /api/doctors/:id
+// GET
 app.get('/api/doctors/:id', authenticate, (req, res) => {
   const doctor = db
     .prepare('SELECT * FROM doctors WHERE id = ? AND isActive = 1')
@@ -220,7 +220,7 @@ app.get('/api/doctors/:id', authenticate, (req, res) => {
   res.json(doctor);
 });
 
-// GET /api/doctors/:id/slots?date=YYYY-MM-DD
+// GET
 app.get('/api/doctors/:id/slots', authenticate, (req, res) => {
   const { date } = req.query;
   let query = `
@@ -238,7 +238,7 @@ app.get('/api/doctors/:id/slots', authenticate, (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
-// ── APPOINTMENTS ─────────────────────────────────────────────────────────────
+// APPOINTMENTS
 
 // POST /api/appointments
 app.post('/api/appointments', authenticate, (req, res) => {
@@ -281,7 +281,7 @@ app.post('/api/appointments', authenticate, (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM appointments WHERE id = ?').get(result.lastInsertRowid));
 });
 
-// GET /api/appointments/mine
+// GET
 app.get('/api/appointments/mine', authenticate, (req, res) => {
   res.json(
     db
@@ -290,7 +290,7 @@ app.get('/api/appointments/mine', authenticate, (req, res) => {
   );
 });
 
-// PUT /api/appointments/:id/cancel
+// PUT
 app.put('/api/appointments/:id/cancel', authenticate, (req, res) => {
   const appt = db
     .prepare('SELECT * FROM appointments WHERE id = ? AND patientId = ?')
@@ -310,9 +310,9 @@ app.put('/api/appointments/:id/cancel', authenticate, (req, res) => {
   res.json({ message: 'Rendez-vous annulé' });
 });
 
-// ── ADMIN — nouveau #4 ───────────────────────────────────────────────────────
+// ADMIN
 
-// GET /api/admin/stats
+// GET
 app.get('/api/admin/stats', authenticate, requireAdmin, (req, res) => {
   res.json({
     totalDoctors: db.prepare('SELECT COUNT(*) as n FROM doctors WHERE isActive = 1').get().n,
@@ -322,7 +322,7 @@ app.get('/api/admin/stats', authenticate, requireAdmin, (req, res) => {
   });
 });
 
-// POST /api/admin/doctors
+// POST
 app.post('/api/admin/doctors', authenticate, requireAdmin, (req, res) => {
   const { firstName, lastName, specialty, description, address, city, phone, avatarUrl, price } = req.body;
 
@@ -339,7 +339,7 @@ app.post('/api/admin/doctors', authenticate, requireAdmin, (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM doctors WHERE id = ?').get(result.lastInsertRowid));
 });
 
-// POST /api/admin/doctors/:id/slots
+// POST
 app.post('/api/admin/doctors/:id/slots', authenticate, requireAdmin, (req, res) => {
   const { slots } = req.body;
 
@@ -353,7 +353,7 @@ app.post('/api/admin/doctors/:id/slots', authenticate, requireAdmin, (req, res) 
   res.status(201).json({ message: `${slots.length} créneau(x) ajouté(s)` });
 });
 
-// PUT /api/admin/doctors/:id
+// PUT
 app.put('/api/admin/doctors/:id', authenticate, requireAdmin, (req, res) => {
   const doctor = db.prepare('SELECT id FROM doctors WHERE id = ?').get(req.params.id);
   if (!doctor) return res.status(404).json({ error: 'Médecin introuvable' });
@@ -379,14 +379,14 @@ app.put('/api/admin/doctors/:id', authenticate, requireAdmin, (req, res) => {
   res.json(db.prepare('SELECT * FROM doctors WHERE id = ?').get(req.params.id));
 });
 
-// DELETE /api/admin/doctors/:id  (soft delete)
+// DELETE
 app.delete('/api/admin/doctors/:id', authenticate, requireAdmin, (req, res) => {
   const result = db.prepare('UPDATE doctors SET isActive = 0 WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'Médecin introuvable' });
   res.json({ message: 'Médecin désactivé' });
 });
 
-// ── DÉMARRAGE ────────────────────────────────────────────────────────────────
+// DÉMARRAGE
 
 app.listen(PORT, () => {
   console.log(`✅ Carely API démarrée sur http://localhost:${PORT}`);

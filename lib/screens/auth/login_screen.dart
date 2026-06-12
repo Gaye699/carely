@@ -127,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 16),
 
                 // Mot de passe
-                _label('Mot de passe', theme, isDark),
+                _label('Mot de passe ', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _passwordCtrl,

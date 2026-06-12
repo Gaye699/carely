@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../search/search_screen.dart';
 import 'home_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -18,7 +19,7 @@ class _MainScreenState extends State<MainScreen> {
       icon: Icons.calendar_month_rounded,
       label: 'Mes RDV',
     ),
-    const _PlaceholderScreen(icon: Icons.search_rounded, label: 'Médecins'),
+    const SearchScreen(),
     const _PlaceholderScreen(icon: Icons.person_rounded, label: 'Profil'),
   ];
 

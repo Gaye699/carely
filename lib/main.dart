@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/providers/theme_provider.dart';
-import 'screens/auth/login_screen.dart';
+import 'core/router/app_router.dart';
+import 'core/services/auth_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      // ← MultiProvider au lieu de ChangeNotifierProvider
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AuthService()), // ← ajouter
+      ],
       child: const CarelyApp(),
     ),
   );
@@ -20,13 +25,13 @@ class CarelyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, _) => MaterialApp(
+      builder: (context, themeProvider, _) => MaterialApp.router(
         title: 'Carely',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: themeProvider.themeMode,
-        home: const LoginScreen(),
+        routerConfig: AppRouter.router,
       ),
     );
   }

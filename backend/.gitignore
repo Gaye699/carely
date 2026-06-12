@@ -1,0 +1,4 @@
+node_modules/
+carely.db
+.env
+*.env

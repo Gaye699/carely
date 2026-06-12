@@ -1,63 +1,72 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  AppColors._(); // [cite: 10]
+  AppColors._();
 
-  // Primaire (Bleu de ta nouvelle capture)
-  static const Color primary = Color(0xFF3775E0);
+  //  Palette principale
+  static const Color primary = Color(0xFF2177BD);
   static const Color primaryLight = Color(0xFFF2F8FF);
-  static const Color primaryDark = Color(0xFF1F5BBF);
+  static const Color primaryDark = Color(0xFF1558A0);
 
-  // Neutres
-  static const Color navy = Color(0xFF9694A0); // Gris de la capture
-  static const Color darkNavy = Color(
-    0xFF121027,
-  ); // Bleu nuit/Noir de la capture
-  static const Color grey = Color(0xFF9694A0);
-  static const Color greyLight = Color(0xFFE0E0E0);
+  // Palette secondaire
+  static const Color darkNavy = Color(0xFF1F2037);
+  static const Color navy = Color(0xFF454665);
 
-  // Sémantiques [cite: 14]
-  static const Color success = Color(0xFF35C08A); // [cite: 14]
-  static const Color error = Color(0xFFE05050); // [cite: 14]
-  static const Color warning = Color(0xFFF5A623); // [cite: 15]
-  static const Color star = Color(0xFFFFC107); // [cite: 15]
+  //  Neutres
+  static const Color grey50 = Color(0xFFF7F8FC);
+  static const Color grey100 = Color(0xFFEEF0F5);
+  static const Color grey200 = Color(0xFFC7C7C7);
+  static const Color grey300 = Color(0xFFC8D0D0);
+  static const Color grey500 = Color(0xFFA6A6A6);
+  static const Color grey700 = Color(0xFF9694A0);
 
-  // Light mode (Adapté à ton écran de login)
+  // Sémantiques
+  static const Color success = Color(0xFF35C08A);
+  static const Color successLight = Color(0xFFEAFAF2);
+  static const Color error = Color(0xFFE05050);
+  static const Color errorLight = Color(0xFFFEF0F0);
+  static const Color warning = Color(0xFFF5A623);
+  static const Color star = Color(0xFFFFC107);
+
+  // Light mode
   static const Color bgLight = Color(0xFFFFFFFF);
+  static const Color scaffoldLight = Color(0xFFF7F8FC);
   static const Color surfaceLight = Color(0xFFFFFFFF);
   static const Color cardLight = Color(0xFFFFFFFF);
-  static const Color borderLight = Color(0xFFE0E0E0);
-  static const Color inputFillLight = Color(
-    0xFFF7F7F7,
-  ); // Fond des inputs gris très clair
-  static const Color textPrimaryLight = Color(0xFF121027);
+  static const Color borderLight = Color(0xFFEEF0F5);
+  static const Color inputFillLight = Color(0xFFF7F8FC);
+  static const Color textPrimaryLight = Color(0xFF1F2037);
   static const Color textSecondaryLight = Color(0xFF9694A0);
-  static const Color textHintLight = Color(0xFF9694A0);
+  static const Color textHintLight = Color(0xFFC7C7C7);
 
-  // Dark mode (Combinaison basée sur ton Bleu Nuit profond #121027)
-  static const Color bgDark = Color(0xFF121027); // Fond principal
-  static const Color surfaceDark = Color(
-    0xFF1A1833,
-  ); // Légèrement plus clair pour les éléments de surface
-  static const Color cardDark = Color(
-    0xFF222042,
-  ); // Pour faire ressortir les cartes
-  static const Color borderDark = Color(
-    0xFF2E2C54,
-  ); // Bordures subtiles en mode sombre
+  // Dark mode
+  static const Color bgDark = Color(0xFF121027);
+  static const Color scaffoldDark = Color(0xFF0E0D20);
+  static const Color surfaceDark = Color(0xFF1A1833);
+  static const Color cardDark = Color(0xFF222042);
+  static const Color borderDark = Color(0xFF2E2C54);
   static const Color inputFillDark = Color(0xFF1A1833);
   static const Color textPrimaryDark = Color(0xFFFFFFFF);
   static const Color textSecondaryDark = Color(0xFF9694A0);
   static const Color textHintDark = Color(0xFF6A697A);
 
-  // Gradients mis à jour avec ton nouveau bleu
-  static const LinearGradient headerGradient = LinearGradient(
-    colors: [Color(0xFF3775E0), Color(0xFF1F5BBF)],
+  static const Color grey = Color(0xFF9EA6B0);
+  static const Color greyLight = Color(0xFFC7C7C7);
+
+  // Gradients
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [Color(0xFF2177BD), Color(0xFF1558A0)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
   static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFF3775E0), Color(0xFF6095F0)],
+    colors: [Color(0xFF2177BD), Color(0xFF4A9FE0)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient headerGradient = LinearGradient(
+    colors: [Color(0xFF2177BD), Color(0xFF1558A0)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

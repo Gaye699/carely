@@ -1,96 +1,61 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_colors.dart';
-import 'home_screen.dart';
+import 'package:go_router/go_router.dart';
+import '../home/home_screen.dart';
 
-class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
-  @override
-  State<MainScreen> createState() => _MainScreenState();
-}
+class MainScreen extends StatelessWidget {
+  final Widget child;
+  const MainScreen({super.key, required this.child});
 
-class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
-
-  // Dev B remplacera les _PlaceholderScreen par ses vrais screens
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const _PlaceholderScreen(
-      icon: Icons.calendar_month_rounded,
-      label: 'Mes RDV',
-    ),
-    const _PlaceholderScreen(icon: Icons.search_rounded, label: 'Médecins'),
-    const _PlaceholderScreen(icon: Icons.person_rounded, label: 'Profil'),
-  ];
+  int _selectedIndex(BuildContext context) {
+    final loc = GoRouterState.of(context).uri.toString();
+    if (loc == '/') return 0;
+    if (loc == '/appointments') return 1;
+    if (loc == '/profile') return 2;
+    return 0;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: isDark ? AppColors.borderDark : AppColors.borderLight,
-            ),
+      body: child,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex(context),
+        type: BottomNavigationBarType.fixed,
+        onTap: (i) {
+          switch (i) {
+            case 0:
+              context.go('/');
+            case 1:
+              context.go('/appointments');
+            case 2:
+              context.go('/profile');
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Accueil',
           ),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home_rounded),
-              label: 'Accueil',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_today_outlined),
-              activeIcon: Icon(Icons.calendar_month_rounded),
-              label: 'Mes RDV',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.search_outlined),
-              activeIcon: Icon(Icons.search_rounded),
-              label: 'Médecins',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline_rounded),
-              activeIcon: Icon(Icons.person_rounded),
-              label: 'Profil',
-            ),
-          ],
-        ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today_outlined),
+            activeIcon: Icon(Icons.calendar_today),
+            label: 'Mes RDV',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profil',
+          ),
+        ],
       ),
     );
   }
 }
 
-class _PlaceholderScreen extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _PlaceholderScreen({required this.icon, required this.label});
+class HomeTab extends StatelessWidget {
+  const HomeTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(label)),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: AppColors.primary.withOpacity(0.3)),
-            const SizedBox(height: 12),
-            Text(
-              'En cours de développement',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const HomeScreen();
 }

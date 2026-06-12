@@ -187,6 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Champ Mot de passe
                 _label('Mot de passe', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(

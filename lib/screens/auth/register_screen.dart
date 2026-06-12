@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart'; // CORRECTION : Import nécessaire pour context.go()
 import 'package:provider/provider.dart';
+import '../../core/services/auth_service.dart'; // CORRECTION : Import de l'AuthService
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/theme_provider.dart';
-import '../home/main_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
+
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
@@ -16,6 +18,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
+
   bool _showPassword = false;
   bool _showConfirm = false;
   bool _acceptTerms = false;
@@ -30,24 +33,71 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> _register() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _handleRegister() async {
+    if (!_formKey.currentState!.validate()) {
+      print("❌ [Carely Debug] Validation du formulaire d'inscription échouée.");
+      return;
+    }
+
     if (!_acceptTerms) {
+      print("⚠️ [Carely Debug] Inscription bloquée : CGU non cochées.");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Veuillez accepter les conditions d'utilisation"),
-          backgroundColor: AppColors.error,
+          content: Text('Veuillez accepter les conditions d\'utilisation.'),
+          backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
+
     setState(() => _loading = true);
-    await Future.delayed(const Duration(seconds: 1));
-    if (!mounted) return;
-    setState(() => _loading = false);
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const MainScreen()));
+    print(
+      "🚀 [Carely Debug] Tentative d'inscription pour : ${_emailCtrl.text.trim()}",
+    );
+
+    try {
+      final nameParts = _nameCtrl.text.trim().split(' ');
+      final firstName = nameParts.first;
+      final lastName = nameParts.length > 1
+          ? nameParts.sublist(1).join(' ')
+          : '';
+
+      final auth = context.read<AuthService>();
+      final success = await auth.register(
+        firstName: firstName,
+        lastName: lastName,
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+      );
+
+      print(
+        "🔄 [Carely Debug] Réponse du AuthService.register() -> success = $success",
+      );
+
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+
+      if (success && mounted) {
+        print(
+          "➡️ [Carely Debug] Redirection demandée vers la page d'accueil (/) après inscription.",
+        );
+        context.go('/');
+      }
+    } catch (e, stackTrace) {
+      print("💥 [Carely Debug] ERREUR CRITIQUE PENDANT L'INSCRIPTION : $e");
+      print(stackTrace);
+
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur technique : $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -65,6 +115,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
+
+                // Barre supérieure : Bouton retour + Bouton Dark Mode
                 Row(
                   children: [
                     IconButton(
@@ -101,9 +153,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 24),
 
+                // Titre principal harmonisé avec l'écran de Login
                 Text(
                   'Créer un compte',
-                  style: theme.textTheme.displayMedium?.copyWith(
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                     color: isDark
                         ? AppColors.textPrimaryDark
                         : AppColors.textPrimaryLight,
@@ -120,6 +174,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 32),
 
+                // Champ Nom complet
                 _label('Nom complet', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -135,6 +190,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Champ Adresse e-mail
                 _label('Adresse e-mail', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -153,6 +209,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Champ Mot de passe
                 _label('Mot de passe', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -180,13 +237,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Champ Confirmer le mot de passe
                 _label('Confirmer le mot de passe', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _confirmCtrl,
                   obscureText: !_showConfirm,
                   textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _register(),
+                  // CORRECTION : Appel de la bonne méthode
+                  onFieldSubmitted: (_) => _handleRegister(),
                   decoration: InputDecoration(
                     hintText: '••••••••',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
@@ -202,14 +261,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Champ requis';
-                    if (v != _passwordCtrl.text)
+                    if (v != _passwordCtrl.text) {
                       return 'Les mots de passe ne correspondent pas';
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: 20),
 
-                // CGU
+                // Case à cocher des CGU
                 GestureDetector(
                   onTap: () => setState(() => _acceptTerms = !_acceptTerms),
                   child: Row(
@@ -273,21 +333,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                ElevatedButton(
-                  onPressed: _loading ? null : _register,
-                  child: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.5,
+                // Intégration de l'affichage des erreurs retournées par l'API (AuthService)
+                Consumer<AuthService>(
+                  builder: (_, auth, __) => auth.error != null
+                      ? Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Center(
+                            child: Text(
+                              auth.error!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         )
-                      : const Text('Créer mon compte'),
+                      : const SizedBox.shrink(),
+                ),
+
+                // Bouton d'inscription
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    // CORRECTION : Appel de la bonne méthode avec gestion du chargement
+                    onPressed: _loading ? null : _handleRegister,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : const Text('Créer mon compte'),
+                  ),
                 ),
                 const SizedBox(height: 28),
 
+                // Lien vers la page de Connexion
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,

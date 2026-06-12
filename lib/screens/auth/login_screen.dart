@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/theme_provider.dart';
 import 'register_screen.dart';
-import '../home/main_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -15,28 +17,65 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+
   bool _showPassword = false;
   bool _rememberMe = false;
   bool _loading = false;
 
   @override
   void dispose() {
+    // CORRECTION : Utilisation des bons noms de variables des contrôleurs
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) {
+      print("❌ [Carely Debug] Validation du formulaire de connexion échouée.");
+      return;
+    }
+
     setState(() => _loading = true);
-    await Future.delayed(
-      const Duration(seconds: 1),
-    ); // remplacé par AuthProvider plus tard
-    if (!mounted) return;
-    setState(() => _loading = false);
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const MainScreen()));
+    print(
+      "🚀 [Carely Debug] Tentative de connexion pour : ${_emailCtrl.text.trim()}",
+    );
+
+    try {
+      final auth = context.read<AuthService>();
+      final success = await auth.login(
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+      );
+
+      print(
+        "🔄 [Carely Debug] Réponse du AuthService.login() -> success = $success",
+      );
+
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+
+      if (success && mounted) {
+        print(
+          "➡️ [Carely Debug] Redirection demandée vers la page d'accueil (/) via GoRouter.",
+        );
+        context.go('/');
+      }
+    } catch (e, stackTrace) {
+      print("💥 [Carely Debug] ERREUR CRITIQUE PENDANT LE LOGIN : $e");
+      print(stackTrace);
+
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur technique : $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -54,43 +93,65 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                // Bouton dark mode (coin haut droit)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Consumer<ThemeProvider>(
-                    builder: (_, tp, __) => IconButton(
-                      icon: Icon(
-                        tp.isDark
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+
+                // Barre du haut : Bouton retour (comme sur ton mockup) + Toggle Dark Mode
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                    ),
+                    Consumer<ThemeProvider>(
+                      builder: (_, tp, __) => IconButton(
+                        icon: Icon(
+                          tp.isDark
+                              ? Icons.light_mode_rounded
+                              : Icons.dark_mode_rounded,
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        onPressed: tp.toggle,
                       ),
-                      onPressed: tp.toggle,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Logo de l'application
+                Center(
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Fallback si l'image assets/logo.png n'est pas encore créée
+                        return const Icon(
+                          Icons.local_hospital,
+                          color: AppColors.primary,
+                          size: 32,
+                        );
+                      },
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // Icône logo
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.favorite_rounded,
-                    color: AppColors.primary,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Titre
+                // Titre principal
                 Text(
                   'Bienvenue\nsur Carely 👋',
-                  style: theme.textTheme.displayMedium?.copyWith(
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                     color: isDark
                         ? AppColors.textPrimaryDark
                         : AppColors.textPrimaryLight,
@@ -107,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 36),
 
-                // Email
+                // Champ Adresse e-mail
                 _label('Adresse e-mail', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -126,14 +187,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Mot de passe
-                _label('Mot de passe ', theme, isDark),
+                // Champ Mot de passe
+                _label('Mot de passe', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _passwordCtrl,
                   obscureText: !_showPassword,
                   textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _login(),
+                  // CORRECTION : Appel de la bonne méthode de soumission
+                  onFieldSubmitted: (_) => _handleLogin(),
                   decoration: InputDecoration(
                     hintText: '••••••••',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
@@ -155,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Remember me + Forgot
+                // Remember me + Forgot Password
                 Row(
                   children: [
                     GestureDetector(
@@ -198,7 +260,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const Spacer(),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        // Logique mot de passe oublié
+                      },
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,
                         minimumSize: Size.zero,
@@ -210,23 +274,46 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Bouton connexion
-                ElevatedButton(
-                  onPressed: _loading ? null : _login,
-                  child: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.5,
+                // Affichage dynamique des erreurs provenant de l'AuthService
+                Consumer<AuthService>(
+                  builder: (_, auth, __) => auth.error != null
+                      ? Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Center(
+                            child: Text(
+                              auth.error!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 13,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         )
-                      : const Text('Se connecter'),
+                      : const SizedBox.shrink(),
+                ),
+
+                // Bouton de connexion
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    // CORRECTION : Appel de la bonne méthode
+                    onPressed: _loading ? null : _handleLogin,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : const Text('Se connecter'),
+                  ),
                 ),
                 const SizedBox(height: 28),
 
-                // Divider
+                // Séparateur "Ou"
                 Row(
                   children: [
                     const Expanded(child: Divider()),
@@ -242,7 +329,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Boutons sociaux
+                // Boutons d'authentification sociale
                 Row(
                   children: [
                     Expanded(
@@ -266,7 +353,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 36),
 
-                // Lien inscription
+                // Lien vers la création de compte
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,

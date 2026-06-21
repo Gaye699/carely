@@ -6,9 +6,14 @@ import 'package:http/http.dart' as http;
 class AuthService extends ChangeNotifier {
   static const _storage = FlutterSecureStorage();
 
+  // En dev local : changer selon l'appareil utilisé
+  // Emulateur Android  → http://10.0.2.2:3000/api
+  // Simulateur iOS     → http://localhost:3000/api
+  // Téléphone physique → http://TON_IP_LOCAL:3000/api  (ex: 192.168.1.42)
+  // Production Railway → https://carely-backend.up.railway.app/api
   static String get baseUrl {
     if (kDebugMode) return 'http://10.0.2.2:3000/api';
-    return 'https://TON_APP.up.railway.app/api';
+    return 'https://carely-backend.up.railway.app/api';
   }
 
   bool _isLoading = false;
@@ -81,7 +86,7 @@ class AuthService extends ChangeNotifier {
         _setLoading(false);
         return true;
       }
-      _error = data['message'] ?? 'Email ou mot de passe incorrect';
+      _error = data['error'] ?? 'Email ou mot de passe incorrect';
       _setLoading(false);
       return false;
     } catch (_) {
@@ -118,7 +123,7 @@ class AuthService extends ChangeNotifier {
         _setLoading(false);
         return true;
       }
-      _error = data['message'] ?? 'Erreur lors de l\'inscription';
+      _error = data['error'] ?? 'Erreur lors de l\'inscription';
       _setLoading(false);
       return false;
     } catch (_) {

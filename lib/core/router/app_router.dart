@@ -20,20 +20,23 @@ class AppRouter {
     initialLocation: '/login',
     redirect: _redirect,
     routes: [
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
-      GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
+      GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
+      GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
 
       ShellRoute(
         builder: (context, state, child) => MainScreen(child: child),
         routes: [
-          GoRoute(path: '/', builder: (_, __) => const HomeTab()),
-          GoRoute(path: '/search', builder: (context, state) => const SearchScreen()),
+          GoRoute(path: '/', builder: (_, _) => const HomeTab()),
+          GoRoute(
+            path: '/search',
+            builder: (context, state) => const SearchScreen(),
+          ),
           GoRoute(
             path: '/appointments',
-            builder: (_, __) => const MyAppointmentsScreen(),
+            builder: (_, _) => const MyAppointmentsScreen(),
           ),
-          GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+          GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
         ],
       ),
 

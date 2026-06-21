@@ -1,5 +1,3 @@
-// Exécuter avec : node seed.js
-// Remet la BDD à zéro avec des données de démonstration.
 
 const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
@@ -85,7 +83,7 @@ db.transaction(() => {
   }
 })();
 
-console.log('✅ Seed terminé :');
+console.log(' Seed terminé :');
 console.log('   - 2 utilisateurs (admin@carely.fr / patient@carely.fr)');
 console.log('   - 5 médecins');
 console.log('   - Créneaux sur 7 jours (lun-dim, 9h-17h)');

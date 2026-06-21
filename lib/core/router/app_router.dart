@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:carely/core/services/auth_service.dart';
 import 'package:carely/screens/auth/login_screen.dart';
 import 'package:carely/screens/auth/register_screen.dart';
@@ -14,8 +13,6 @@ import 'package:carely/screens/admin/admin_screen.dart';
 import 'package:carely/screens/search/search_screen.dart';
 
 class AppRouter {
-  static const _storage = FlutterSecureStorage();
-
   static final GoRouter router = GoRouter(
     initialLocation: '/login',
     redirect: _redirect,
@@ -28,10 +25,7 @@ class AppRouter {
         builder: (context, state, child) => MainScreen(child: child),
         routes: [
           GoRoute(path: '/', builder: (_, _) => const HomeTab()),
-          GoRoute(
-            path: '/search',
-            builder: (context, state) => const SearchScreen(),
-          ),
+          GoRoute(path: '/search', builder: (_, _) => const SearchScreen()),
           GoRoute(
             path: '/appointments',
             builder: (_, _) => const MyAppointmentsScreen(),
@@ -60,10 +54,6 @@ class AppRouter {
     final authService = context.read<AuthService>();
     final isLoggedIn = authService.isLoggedIn;
     final role = authService.currentUser?['role'];
-
-    print(
-      "🔑 [Router Debug] Route demandée : ${state.matchedLocation} | Connecté : $isLoggedIn | Rôle : $role",
-    );
 
     final isAuthRoute =
         state.matchedLocation == '/login' ||

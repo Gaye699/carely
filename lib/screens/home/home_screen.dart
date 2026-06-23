@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/consultant.dart';
 import '../../core/providers/consultant_provider.dart';
 import '../../core/providers/theme_provider.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,15 +14,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // null = "Tous"
   String? _selectedDomain;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
-    // Watch at the top of build so no Consumer ends up inside slivers.
     final consultantProvider = context.watch<ConsultantProvider>();
 
     final filtered = _selectedDomain == null
@@ -34,13 +33,14 @@ class _HomeScreenState extends State<HomeScreen> {
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
-              child: _header(context, isDark, consultantProvider.allConsultants.length),
+              child: _header(
+                  context, isDark, consultantProvider.allConsultants.length),
             ),
-            SliverToBoxAdapter(child: _searchBar()),
+            SliverToBoxAdapter(child: _searchBar(context)),
             SliverToBoxAdapter(child: _chips(isDark)),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                 child: _upcomingCard(),
               ),
             ),
@@ -59,14 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () => context.go('/search'),
                       child: const Text('Voir tout'),
                     ),
                   ],
                 ),
               ),
             ),
-            // Sliver list — built from plain data, no Consumer wrapper.
             if (consultantProvider.isLoading)
               const SliverToBoxAdapter(
                 child: Padding(
@@ -90,13 +89,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             else
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (_, i) => Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: _doctorCard(filtered[i], theme, isDark),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                sliver: SliverGrid(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.82,
                   ),
-                  childCount: filtered.length,
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => _doctorCard(filtered[i], theme, isDark),
+                    childCount: filtered.length,
+                  ),
                 ),
               ),
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
@@ -129,11 +135,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  child: const Icon(Icons.person_rounded,
+                      color: Colors.white, size: 24),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -141,27 +144,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Bonjour 👋',
+                        'Bonjour,',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontSize: 13,
-                        ),
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 13),
                       ),
-                      const Text(
-                        'Jean Dupont',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Consumer<AuthService>(
+                        builder: (context, auth, child) {
+                          final user = auth.currentUser;
+                          final name = user != null
+                              ? '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'
+                                  .trim()
+                              : '';
+                          return Text(
+                            name.isNotEmpty ? name : 'Utilisateur',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
                 ),
                 _iconBtn(Icons.notifications_outlined),
                 const SizedBox(width: 8),
-                // Consumer<ThemeProvider> is fine here — it's inside
-                // SliverToBoxAdapter's child, not directly in slivers.
                 Consumer<ThemeProvider>(
                   builder: (_, tp, _) => _iconBtn(
                     tp.isDark
@@ -172,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             const Text(
               'Trouvez votre\nmédecin idéal',
               style: TextStyle(
@@ -186,9 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               '$count spécialiste${count == 1 ? '' : 's'} disponibles',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 13,
-              ),
+                  color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
             ),
           ],
         ),
@@ -209,43 +216,51 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Search bar ────────────────────────────────────────────────────────
 
-  Widget _searchBar() => Padding(
+  Widget _searchBar(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-        child: TextField(
-          decoration: InputDecoration(
-            hintText: 'Rechercher un médecin…',
-            prefixIcon:
-                const Icon(Icons.search_rounded, color: AppColors.grey),
-            suffixIcon: Container(
-              margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.tune_rounded,
-                color: Colors.white,
-                size: 18,
+        child: GestureDetector(
+          onTap: () => context.go('/search'),
+          child: AbsorbPointer(
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Rechercher un médecin…',
+                prefixIcon:
+                    const Icon(Icons.search_rounded, color: AppColors.grey),
+                suffixIcon: Container(
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.tune_rounded,
+                      color: Colors.white, size: 18),
+                ),
               ),
             ),
           ),
         ),
       );
 
-  // ── Domain chips ──────────────────────────────────────────────────────
+  // ── Domain chips with icons ───────────────────────────────────────────
 
   Widget _chips(bool isDark) => SizedBox(
-        height: 52,
+        height: 92,
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
           children: [
-            _chip(label: 'Tous', domain: null, isDark: isDark),
+            _iconChip(
+              label: 'Tous',
+              icon: Icons.apps_rounded,
+              domain: null,
+              isDark: isDark,
+            ),
             ...ConsultantDomain.all.map(
               (d) => Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: _chip(
-                  label: ConsultantDomain.label(d),
+                padding: const EdgeInsets.only(left: 14),
+                child: _iconChip(
+                  label: ConsultantDomain.shortLabel(d),
+                  icon: ConsultantDomain.icon(d),
                   domain: d,
                   isDark: isDark,
                 ),
@@ -255,40 +270,60 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  Widget _chip({
+  Widget _iconChip({
     required String label,
+    required IconData icon,
     required String? domain,
     required bool isDark,
   }) {
     final selected = _selectedDomain == domain;
     return GestureDetector(
       onTap: () => setState(() => _selectedDomain = domain),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(50),
-          border: Border.all(
-            color: selected
-                ? AppColors.primary
-                : isDark
-                    ? AppColors.borderDark
-                    : AppColors.borderLight,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.primary
+                  : (isDark ? AppColors.cardDark : AppColors.grey50),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected
+                    ? AppColors.primary
+                    : isDark
+                        ? AppColors.borderDark
+                        : AppColors.borderLight,
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: selected
+                  ? Colors.white
+                  : (isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.primary),
+              size: 22,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected
-                ? Colors.white
-                : isDark
-                    ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight,
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight:
+                  selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected
+                  ? AppColors.primary
+                  : isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -313,18 +348,14 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.calendar_today_rounded,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                const Icon(Icons.calendar_today_rounded,
+                    color: Colors.white, size: 16),
                 const SizedBox(width: 6),
                 Text(
                   'Prochain rendez-vous',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 13,
-                  ),
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13),
                 ),
               ],
             ),
@@ -338,11 +369,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: Colors.white,
-                    size: 26,
-                  ),
+                  child: const Icon(Icons.person_rounded,
+                      color: Colors.white, size: 26),
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
@@ -352,16 +380,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(
                         'Dr. Thomas Dupont',
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600),
                       ),
                       SizedBox(height: 2),
-                      Text(
-                        'Cardiologue',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
+                      Text('Cardiologue',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -385,105 +411,105 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Icon(icon, color: Colors.white70, size: 14),
           const SizedBox(width: 5),
-          Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text(text,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500)),
         ],
       );
 
-  // ── Doctor card ────────────────────────────────────────────────────────
+  // ── Doctor card (grid) ────────────────────────────────────────────────
 
   Widget _doctorCard(Consultant c, ThemeData theme, bool isDark) =>
       GestureDetector(
-        onTap: () {},
+        onTap: () => context.push('/doctor/${c.id}'),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isDark ? AppColors.cardDark : AppColors.cardLight,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark ? AppColors.borderDark : AppColors.borderLight,
             ),
-          ),
-          child: Row(
-            children: [
-              _photo(c.photoUrl),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      c.fullName,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    Text(c.specialty, style: theme.textTheme.bodySmall),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.star_rounded,
-                            color: AppColors.star, size: 15),
-                        const SizedBox(width: 3),
-                        Text(
-                          c.rating.toStringAsFixed(1),
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ],
+            boxShadow: [
+              if (!isDark)
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _photo(c.photoUrl),
+                  const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
+                        horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: c.available
                           ? AppColors.success.withValues(alpha: 0.1)
                           : AppColors.error.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      c.available ? 'Disponible' : 'Indisponible',
+                      c.available ? 'Dispo' : 'Indispo',
                       style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
                         color: c.available
                             ? AppColors.success
                             : AppColors.error,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Réserver',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                c.fullName,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: isDark
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                c.specialty,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  const Icon(Icons.star_rounded,
+                      color: AppColors.star, size: 13),
+                  const SizedBox(width: 3),
+                  Text(
+                    c.rating.toStringAsFixed(1),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight,
                     ),
                   ),
                 ],
@@ -494,16 +520,14 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
   Widget _photo(String? url) => ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          width: 60,
-          height: 60,
+          width: 52,
+          height: 52,
           child: url != null
-              ? Image.network(
-                  url,
+              ? Image.network(url,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => _avatarFallback(),
-                )
+                  errorBuilder: (_, _, _) => _avatarFallback())
               : _avatarFallback(),
         ),
       );
@@ -511,8 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _avatarFallback() => Container(
         color: AppColors.primaryLight,
         child: const Center(
-          child:
-              Icon(Icons.person_rounded, color: AppColors.primary, size: 32),
-        ),
+            child:
+                Icon(Icons.person_rounded, color: AppColors.primary, size: 28)),
       );
 }

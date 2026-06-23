@@ -1,34 +1,62 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../database/database_helper.dart';
 import '../models/consultant.dart';
+import '../services/auth_service.dart';
 
 class ConsultantRepository {
-  Future<List<Consultant>> search({
-    String? query,
-    String? domain,
-  }) async {
-    final db = await DatabaseHelper.database;
+  List<Consultant> _cache = [];
+  bool _loaded = false;
 
-    final conditions = <String>[];
-    final args = <dynamic>[];
+  Future<List<Consultant>> search({String? query, String? domain}) async {
+    if (!_loaded) await _loadData();
+
+    var results = _cache;
 
     if (query != null && query.trim().isNotEmpty) {
-      conditions.add('(LOWER(full_name) LIKE ? OR LOWER(specialty) LIKE ?)');
-      final q = '%${query.trim().toLowerCase()}%';
-      args..add(q)..add(q);
+      final q = query.trim().toLowerCase();
+      results = results
+          .where((c) =>
+              c.fullName.toLowerCase().contains(q) ||
+              c.specialty.toLowerCase().contains(q))
+          .toList();
     }
 
     if (domain != null && domain.isNotEmpty) {
-      conditions.add('domain = ?');
-      args.add(domain);
+      results = results.where((c) => c.domain == domain).toList();
     }
 
-    final maps = await db.query(
-      'consultants',
-      where: conditions.isEmpty ? null : conditions.join(' AND '),
-      whereArgs: args.isEmpty ? null : args,
-      orderBy: 'rating DESC',
-    );
+    return List.from(results);
+  }
 
-    return maps.map(Consultant.fromMap).toList();
+  // Forces a reload from the API on next search() call (call after admin changes).
+  void invalidate() {
+    _loaded = false;
+    _cache = [];
+  }
+
+  Future<void> _loadData() async {
+    // Try backend API first — this is the source of truth for admin-managed doctors.
+    try {
+      final res = await http
+          .get(Uri.parse('${AuthService.baseUrl}/doctors'))
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode == 200) {
+        final list = jsonDecode(res.body) as List;
+        _cache = list
+            .map((m) => Consultant.fromApiMap(m as Map<String, dynamic>))
+            .toList();
+        _loaded = true;
+        return;
+      }
+    } catch (_) {
+      // Backend unreachable — fall through to local SQLite.
+    }
+
+    // Fallback: read from the local seed database.
+    final db = await DatabaseHelper.database;
+    final maps = await db.query('consultants', orderBy: 'rating DESC');
+    _cache = maps.map(Consultant.fromMap).toList();
+    _loaded = true;
   }
 }

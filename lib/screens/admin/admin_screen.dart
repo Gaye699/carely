@@ -121,6 +121,7 @@ class _DoctorsListState extends State<_DoctorsList> {
   }
 
   Future<void> _delete(int id) async {
+    final auth = context.read<AuthService>();
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -137,8 +138,8 @@ class _DoctorsListState extends State<_DoctorsList> {
         ],
       ),
     );
-    if (ok == true) {
-      final headers = await context.read<AuthService>().getAuthHeaders();
+    if (ok == true && mounted) {
+      final headers = await auth.getAuthHeaders();
       await http.delete(
         Uri.parse('${AuthService.baseUrl}/admin/doctors/$id'),
         headers: headers,

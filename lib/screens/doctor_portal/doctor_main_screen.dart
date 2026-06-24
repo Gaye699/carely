@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/theme/app_colors.dart';
 import 'doctor_home_screen.dart';
 import 'doctor_availability_screen.dart';
 import 'doctor_appointments_screen.dart';

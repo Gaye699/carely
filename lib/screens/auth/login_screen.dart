@@ -91,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           tp.isDark
                               ? Icons.light_mode_rounded
                               : Icons.dark_mode_rounded,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                         onPressed: tp.toggle,
                       ),

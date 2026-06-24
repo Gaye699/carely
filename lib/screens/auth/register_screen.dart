@@ -119,13 +119,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final firstName = nameParts.first;
       final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
 
+      final auth = context.read<AuthService>();
       String? avatarBase64;
       if (_pickedImage != null) {
         final bytes = await File(_pickedImage!.path).readAsBytes();
         avatarBase64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
       }
-
-      final auth = context.read<AuthService>();
       final success = await auth.register(
         firstName: firstName,
         lastName: lastName,
@@ -207,7 +206,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       builder: (_, tp, _) => IconButton(
                         icon: Icon(
                           tp.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                         onPressed: tp.toggle,
                       ),
@@ -322,7 +321,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   _label('Spécialité', theme, isDark),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: _selectedSpecialty,
+                    initialValue: _selectedSpecialty,
                     decoration: const InputDecoration(
                       hintText: 'Sélectionner une spécialité',
                       prefixIcon: Icon(Icons.medical_services_outlined),

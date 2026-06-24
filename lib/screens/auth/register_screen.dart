@@ -1,9 +1,30 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart'; // CORRECTION : Import nécessaire pour context.go()
+import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import '../../core/services/auth_service.dart'; // CORRECTION : Import de l'AuthService
+import '../../core/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/theme_provider.dart';
+
+const _specialties = [
+  'Médecin généraliste',
+  'Cardiologue',
+  'Dermatologue',
+  'Neurologue',
+  'Pédiatre',
+  'Orthopédiste',
+  'Ophtalmologue',
+  'Psychiatre',
+  'Dentiste',
+  'Gynécologue',
+  'Rhumatologue',
+  'Endocrinologue',
+  'Gastro-entérologue',
+  'Pneumologue',
+  'Urologue',
+];
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,7 +39,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
+  final _rppsCtrl = TextEditingController();
 
+  String _role = 'patient';
+  String? _selectedSpecialty;
+  XFile? _pickedImage;
   bool _showPassword = false;
   bool _showConfirm = false;
   bool _acceptTerms = false;
@@ -30,20 +55,58 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
+    _rppsCtrl.dispose();
     super.dispose();
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: source, imageQuality: 70, maxWidth: 512);
+    if (file != null) setState(() => _pickedImage = file);
+  }
+
+  void _showImagePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Prendre une photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choisir depuis la galerie'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleRegister() async {
-    if (!_formKey.currentState!.validate()) {
-      print("❌ [Carely Debug] Validation du formulaire d'inscription échouée.");
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     if (!_acceptTerms) {
-      print("⚠️ [Carely Debug] Inscription bloquée : CGU non cochées.");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Veuillez accepter les conditions d\'utilisation.'),
+          content: Text("Veuillez accepter les conditions d'utilisation."),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -51,16 +114,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     setState(() => _loading = true);
-    print(
-      "🚀 [Carely Debug] Tentative d'inscription pour : ${_emailCtrl.text.trim()}",
-    );
-
     try {
       final nameParts = _nameCtrl.text.trim().split(' ');
       final firstName = nameParts.first;
-      final lastName = nameParts.length > 1
-          ? nameParts.sublist(1).join(' ')
-          : '';
+      final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+      String? avatarBase64;
+      if (_pickedImage != null) {
+        final bytes = await File(_pickedImage!.path).readAsBytes();
+        avatarBase64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      }
 
       final auth = context.read<AuthService>();
       final success = await auth.register(
@@ -68,33 +131,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
         lastName: lastName,
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
+        role: _role,
+        specialty: _role == 'doctor' ? _selectedSpecialty : null,
+        rppsNumber: _role == 'doctor' ? _rppsCtrl.text.trim() : null,
+        avatarUrl: avatarBase64,
       );
 
-      print(
-        "🔄 [Carely Debug] Réponse du AuthService.register() -> success = $success",
-      );
-
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-
+      if (mounted) setState(() => _loading = false);
       if (success && mounted) {
-        print(
-          "➡️ [Carely Debug] Redirection demandée vers la page d'accueil (/) après inscription.",
-        );
-        context.go('/');
+        if (_role == 'doctor') {
+          // Médecin créé mais non vérifié — montrer un message
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => AlertDialog(
+              title: const Text('Compte en attente'),
+              content: const Text(
+                'Votre compte médecin a été créé.\n\n'
+                'Votre numéro RPPS va être vérifié par notre équipe '
+                '(délai : 24-48h). Vous recevrez une confirmation par email.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    context.go('/login');
+                  },
+                  child: const Text('Compris'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          context.go('/');
+        }
       }
-    } catch (e, stackTrace) {
-      print("💥 [Carely Debug] ERREUR CRITIQUE PENDANT L'INSCRIPTION : $e");
-      print(stackTrace);
-
+    } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur technique : $e'),
-            backgroundColor: Colors.redAccent,
-          ),
+          SnackBar(content: Text('Erreur : $e'), backgroundColor: Colors.redAccent),
         );
       }
     }
@@ -115,35 +191,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-
-                // Barre supérieure : Bouton retour + Bouton Dark Mode
                 Row(
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
                       style: IconButton.styleFrom(
-                        backgroundColor: isDark
-                            ? AppColors.cardDark
-                            : AppColors.inputFillLight,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                        backgroundColor: isDark ? AppColors.cardDark : AppColors.inputFillLight,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      icon: Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 18,
-                        color: isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight,
-                      ),
+                      icon: Icon(Icons.arrow_back_ios_new_rounded, size: 18,
+                          color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
                     ),
                     const Spacer(),
                     Consumer<ThemeProvider>(
-                      builder: (_, tp, __) => IconButton(
+                      builder: (_, tp, _) => IconButton(
                         icon: Icon(
-                          tp.isDark
-                              ? Icons.light_mode_rounded
-                              : Icons.dark_mode_rounded,
+                          tp.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
                         ),
                         onPressed: tp.toggle,
@@ -152,29 +215,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
+                Text('Créer un compte',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                    )),
+                const SizedBox(height: 8),
+                Text('Rejoignez Carely pour gérer vos rendez-vous',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    )),
+                const SizedBox(height: 28),
 
-                // Titre principal harmonisé avec l'écran de Login
-                Text(
-                  'Créer un compte',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: isDark
-                        ? AppColors.textPrimaryDark
-                        : AppColors.textPrimaryLight,
+                // Sélection du rôle
+                _label('Je suis…', theme, isDark),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _roleChip('patient', 'Patient', Icons.person_outline, isDark),
+                    const SizedBox(width: 12),
+                    _roleChip('doctor', 'Médecin', Icons.medical_services_outlined, isDark),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Photo de profil
+                Center(
+                  child: GestureDetector(
+                    onTap: _showImagePicker,
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 44,
+                          backgroundColor: AppColors.primaryLight,
+                          backgroundImage: _pickedImage != null
+                              ? FileImage(File(_pickedImage!.path))
+                              : null,
+                          child: _pickedImage == null
+                              ? Icon(Icons.person_rounded,
+                                  size: 44, color: AppColors.primary)
+                              : null,
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: isDark ? AppColors.cardDark : Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Rejoignez Carely pour gérer vos rendez-vous',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
+                Center(
+                  child: Text('Ajouter une photo',
+                      style: TextStyle(fontSize: 12, color: AppColors.primary,
+                          fontWeight: FontWeight.w500)),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
-                // Champ Nom complet
+                // Nom complet
                 _label('Nom complet', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -185,12 +294,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hintText: 'Jean Dupont',
                     prefixIcon: Icon(Icons.person_outline_rounded),
                   ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Champ requis' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Champ requis' : null,
                 ),
                 const SizedBox(height: 16),
 
-                // Champ Adresse e-mail
+                // Email
                 _label('Adresse e-mail', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -209,7 +317,55 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Champ Mot de passe
+                // Champs spécifiques médecin
+                if (_role == 'doctor') ...[
+                  _label('Spécialité', theme, isDark),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedSpecialty,
+                    decoration: const InputDecoration(
+                      hintText: 'Sélectionner une spécialité',
+                      prefixIcon: Icon(Icons.medical_services_outlined),
+                    ),
+                    items: _specialties
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedSpecialty = v),
+                    validator: (v) => v == null ? 'Champ requis' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  _label('Numéro RPPS', theme, isDark),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Répertoire Partagé des Professionnels de Santé (11 chiffres)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _rppsCtrl,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    maxLength: 11,
+                    decoration: const InputDecoration(
+                      hintText: '12345678901',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                      counterText: '',
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Champ requis';
+                      if (!RegExp(r'^\d{11}$').hasMatch(v.trim())) {
+                        return 'Le numéro RPPS doit contenir 11 chiffres';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Mot de passe
                 _label('Mot de passe', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -220,56 +376,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hintText: '••••••••',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
                     suffixIcon: IconButton(
-                      icon: Icon(
-                        _showPassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                      ),
-                      onPressed: () =>
-                          setState(() => _showPassword = !_showPassword),
+                      icon: Icon(_showPassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined),
+                      onPressed: () => setState(() => _showPassword = !_showPassword),
                     ),
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Champ requis';
-                    if (v.length < 6) return 'Minimum 6 caractères';
+                    if (v.length < 8) return 'Minimum 8 caractères';
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // Champ Confirmer le mot de passe
+                // Confirmation
                 _label('Confirmer le mot de passe', theme, isDark),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _confirmCtrl,
                   obscureText: !_showConfirm,
                   textInputAction: TextInputAction.done,
-                  // CORRECTION : Appel de la bonne méthode
                   onFieldSubmitted: (_) => _handleRegister(),
                   decoration: InputDecoration(
                     hintText: '••••••••',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
                     suffixIcon: IconButton(
-                      icon: Icon(
-                        _showConfirm
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                      ),
-                      onPressed: () =>
-                          setState(() => _showConfirm = !_showConfirm),
+                      icon: Icon(_showConfirm
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined),
+                      onPressed: () => setState(() => _showConfirm = !_showConfirm),
                     ),
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Champ requis';
-                    if (v != _passwordCtrl.text) {
-                      return 'Les mots de passe ne correspondent pas';
-                    }
+                    if (v != _passwordCtrl.text) return 'Les mots de passe ne correspondent pas';
                     return null;
                   },
                 ),
                 const SizedBox(height: 20),
 
-                // Case à cocher des CGU
+                // CGU
                 GestureDetector(
                   onTap: () => setState(() => _acceptTerms = !_acceptTerms),
                   child: Row(
@@ -281,25 +428,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         width: 20,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: _acceptTerms
-                              ? AppColors.primary
-                              : Colors.transparent,
+                          color: _acceptTerms ? AppColors.primary : Colors.transparent,
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
                             color: _acceptTerms
                                 ? AppColors.primary
-                                : isDark
-                                ? AppColors.borderDark
-                                : AppColors.borderLight,
+                                : isDark ? AppColors.borderDark : AppColors.borderLight,
                             width: 1.5,
                           ),
                         ),
                         child: _acceptTerms
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 13,
-                              )
+                            ? const Icon(Icons.check, color: Colors.white, size: 13)
                             : null,
                       ),
                       const SizedBox(width: 10),
@@ -307,22 +446,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: RichText(
                           text: TextSpan(
                             style: theme.textTheme.bodySmall,
-                            children: [
-                              const TextSpan(text: "J'accepte les "),
-                              const TextSpan(
+                            children: const [
+                              TextSpan(text: "J'accepte les "),
+                              TextSpan(
                                 text: "Conditions d'utilisation",
                                 style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                    color: AppColors.primary, fontWeight: FontWeight.w600),
                               ),
-                              const TextSpan(text: " et la "),
-                              const TextSpan(
+                              TextSpan(text: " et la "),
+                              TextSpan(
                                 text: "Politique de confidentialité",
                                 style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                    color: AppColors.primary, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -331,66 +466,49 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
-                // Intégration de l'affichage des erreurs retournées par l'API (AuthService)
                 Consumer<AuthService>(
-                  builder: (_, auth, __) => auth.error != null
+                  builder: (_, auth, _) => auth.error != null
                       ? Padding(
                           padding: const EdgeInsets.only(bottom: 16),
                           child: Center(
-                            child: Text(
-                              auth.error!,
-                              style: const TextStyle(
-                                color: Colors.red,
-                                fontSize: 13,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                            child: Text(auth.error!,
+                                style: const TextStyle(color: Colors.red, fontSize: 13),
+                                textAlign: TextAlign.center),
                           ),
                         )
                       : const SizedBox.shrink(),
                 ),
 
-                // Bouton d'inscription
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    // CORRECTION : Appel de la bonne méthode avec gestion du chargement
                     onPressed: _loading ? null : _handleRegister,
                     child: _loading
                         ? const SizedBox(
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
+                                color: Colors.white, strokeWidth: 2.5),
                           )
                         : const Text('Créer mon compte'),
                   ),
                 ),
                 const SizedBox(height: 28),
 
-                // Lien vers la page de Connexion
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        'Déjà un compte ? ',
-                        style: theme.textTheme.bodyMedium,
-                      ),
+                      Text('Déjà un compte ? ', style: theme.textTheme.bodyMedium),
                       GestureDetector(
                         onTap: () => Navigator.of(context).pop(),
-                        child: const Text(
-                          'Se connecter',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
+                        child: const Text('Se connecter',
+                            style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14)),
                       ),
                     ],
                   ),
@@ -404,11 +522,52 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  Widget _roleChip(String value, String label, IconData icon, bool isDark) {
+    final selected = _role == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _role = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary
+                : (isDark ? AppColors.cardDark : AppColors.inputFillLight),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? AppColors.primary
+                  : (isDark ? AppColors.borderDark : AppColors.borderLight),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: selected ? Colors.white : AppColors.primary, size: 22),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: selected
+                      ? Colors.white
+                      : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _label(String text, ThemeData theme, bool isDark) => Text(
-    text,
-    style: theme.textTheme.bodyMedium?.copyWith(
-      fontWeight: FontWeight.w600,
-      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-    ),
-  );
+        text,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+        ),
+      );
 }

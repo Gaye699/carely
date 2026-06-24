@@ -31,46 +31,25 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) {
-      print("❌ [Carely Debug] Validation du formulaire de connexion échouée.");
-      return;
-    }
-
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    print(
-      "🚀 [Carely Debug] Tentative de connexion pour : ${_emailCtrl.text.trim()}",
-    );
-
     try {
       final auth = context.read<AuthService>();
       final success = await auth.login(
         _emailCtrl.text.trim(),
         _passwordCtrl.text,
       );
-
-      print(
-        "🔄 [Carely Debug] Réponse du AuthService.login() -> success = $success",
-      );
-
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-
+      if (mounted) setState(() => _loading = false);
       if (success && mounted) {
-        print(
-          "➡️ [Carely Debug] Redirection demandée vers la page d'accueil (/) via GoRouter.",
-        );
-        context.go('/');
+        final role = auth.currentUser?['role'];
+        context.go(role == 'doctor' ? '/doctor' : '/');
       }
-    } catch (e, stackTrace) {
-      print("💥 [Carely Debug] ERREUR CRITIQUE PENDANT LE LOGIN : $e");
-      print(stackTrace);
-
+    } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur technique : $e'),
+            content: Text('Erreur : $e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -107,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                     Consumer<ThemeProvider>(
-                      builder: (_, tp, __) => IconButton(
+                      builder: (_, tp, _) => IconButton(
                         icon: Icon(
                           tp.isDark
                               ? Icons.light_mode_rounded
@@ -135,7 +114,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       'assets/logo.png',
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
-                        // Fallback si l'image assets/logo.png n'est pas encore créée
                         return const Icon(
                           Icons.local_hospital,
                           color: AppColors.primary,
@@ -149,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Titre principal
                 Text(
-                  'Bienvenue\nsur Carely 👋',
+                  'Bienvenue\nsur Carely',
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: isDark
@@ -276,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Affichage dynamique des erreurs provenant de l'AuthService
                 Consumer<AuthService>(
-                  builder: (_, auth, __) => auth.error != null
+                  builder: (_, auth, _) => auth.error != null
                       ? Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Center(

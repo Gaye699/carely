@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import '../database/database_helper.dart';
 import '../models/consultant.dart';
 import '../services/auth_service.dart';
 
 class ConsultantRepository {
+  static const _storage = FlutterSecureStorage();
   List<Consultant> _cache = [];
   bool _loaded = false;
 
@@ -29,17 +30,27 @@ class ConsultantRepository {
     return List.from(results);
   }
 
-  // Forces a reload from the API on next search() call (call after admin changes).
   void invalidate() {
     _loaded = false;
     _cache = [];
   }
 
   Future<void> _loadData() async {
-    // Try backend API first — this is the source of truth for admin-managed doctors.
     try {
+      final token = await _storage.read(key: 'auth_token');
+      if (token == null) {
+        _cache = [];
+        _loaded = true;
+        return;
+      }
       final res = await http
-          .get(Uri.parse('${AuthService.baseUrl}/doctors'))
+          .get(
+            Uri.parse('${AuthService.baseUrl}/doctors'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
           .timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
@@ -49,14 +60,8 @@ class ConsultantRepository {
         _loaded = true;
         return;
       }
-    } catch (_) {
-      // Backend unreachable — fall through to local SQLite.
-    }
-
-    // Fallback: read from the local seed database.
-    final db = await DatabaseHelper.database;
-    final maps = await db.query('consultants', orderBy: 'rating DESC');
-    _cache = maps.map(Consultant.fromMap).toList();
+    } catch (_) {}
+    _cache = [];
     _loaded = true;
   }
 }

@@ -96,6 +96,9 @@ class Consultant {
   final String? photoUrl;
   final double rating;
   final bool available;
+  final String? description;
+  final double? price;
+  final String? city;
   final String? createdAt;
   final String? updatedAt;
 
@@ -109,6 +112,9 @@ class Consultant {
     this.photoUrl,
     this.rating = 0.0,
     this.available = true,
+    this.description,
+    this.price,
+    this.city,
     this.createdAt,
     this.updatedAt,
   });
@@ -128,7 +134,7 @@ class Consultant {
         updatedAt: map['updated_at'] as String?,
       );
 
-  // From backend API (admin-managed doctors)
+  // From backend API
   factory Consultant.fromApiMap(Map<String, dynamic> map) {
     final firstName = map['firstName'] as String? ?? '';
     final lastName = map['lastName'] as String? ?? '';
@@ -141,9 +147,12 @@ class Consultant {
       specialty: specialty,
       domain: ConsultantDomain.fromSpecialty(specialty),
       phone: map['phone'] as String?,
-      photoUrl: map['photoUrl'] as String?,
+      photoUrl: map['avatarUrl'] as String?,
       rating: (map['rating'] as num?)?.toDouble() ?? 4.5,
       available: isActive == null || isActive == 1 || isActive == true,
+      description: map['description'] as String?,
+      price: (map['price'] as num?)?.toDouble(),
+      city: map['city'] as String?,
     );
   }
 

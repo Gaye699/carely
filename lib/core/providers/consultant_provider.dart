@@ -5,11 +5,6 @@ import '../repositories/consultant_repository.dart';
 
 class ConsultantProvider extends ChangeNotifier {
   ConsultantProvider(this._repo) {
-    // Defer past the current build frame. The constructor is invoked lazily
-    // by ChangeNotifierProvider during a build() call. Calling
-    // notifyListeners() synchronously here would call markNeedsBuild() on a
-    // widget that is already building, triggering the _dependents.isEmpty
-    // assertion in InheritedElement.
     scheduleMicrotask(_loadAll);
   }
 
@@ -17,15 +12,11 @@ class ConsultantProvider extends ChangeNotifier {
   Timer? _debounce;
   bool _disposed = false;
 
-  // Full unfiltered list — used by HomeScreen.
   List<Consultant> _allConsultants = [];
-  // Filtered search results — used by SearchScreen.
   List<Consultant> _consultants = [];
 
   String _searchQuery = '';
   String? _selectedDomain;
-  // Start true so the first frame already shows a loading indicator without
-  // needing a synchronous notifyListeners() call in the constructor.
   bool _isLoading = true;
   String? _error;
 
@@ -36,8 +27,6 @@ class ConsultantProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // Loads every consultant once — for HomeScreen's local chip filter.
-  // Called via scheduleMicrotask so it never runs inside a build().
   Future<void> _loadAll() async {
     _error = null;
     try {
@@ -70,8 +59,6 @@ class ConsultantProvider extends ChangeNotifier {
     _fetch();
   }
 
-  // Updates the filtered search list only. Called from user interactions
-  // (tap, timer), never from build, so the leading notifyListeners() is safe.
   Future<void> _fetch() async {
     _isLoading = true;
     _error = null;

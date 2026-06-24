@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 import '../../core/models/consultant.dart';
 import '../../core/providers/consultant_provider.dart';
 import '../../core/services/auth_service.dart';
@@ -18,33 +18,57 @@ class BookAppointmentScreen extends StatefulWidget {
 
 class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
-  String? _selectedTime;
-  bool _loading = false;
-
-  static const _timeSlots = [
-    '08:00', '08:30', '09:00', '09:30',
-    '10:00', '10:30', '11:00', '11:30',
-    '14:00', '14:30', '15:00', '15:30',
-    '16:00', '16:30', '17:00', '17:30',
-  ];
+  Map<String, dynamic>? _selectedSlot;
+  List<dynamic> _slots = [];
+  bool _slotsLoading = false;
+  bool _booking = false;
 
   List<DateTime> get _nextDays =>
       List.generate(14, (i) => DateTime.now().add(Duration(days: i + 1)));
 
+  @override
+  void initState() {
+    super.initState();
+    _fetchSlots();
+  }
+
+  String _dateStr(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _fetchSlots() async {
+    setState(() { _slotsLoading = true; _selectedSlot = null; });
+    final auth = context.read<AuthService>();
+    final headers = await auth.getAuthHeaders();
+    try {
+      final res = await http
+          .get(
+            Uri.parse(
+                '${AuthService.baseUrl}/doctors/${widget.doctorId}/slots?date=${_dateStr(_selectedDate)}'),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 8));
+      if (!mounted) return;
+      setState(() {
+        _slots = res.statusCode == 200 ? (jsonDecode(res.body) as List) : [];
+        _slotsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _slots = []; _slotsLoading = false; });
+    }
+  }
+
   Future<void> _confirm(Consultant doctor) async {
-    if (_selectedTime == null) {
+    if (_selectedSlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sélectionnez un horaire')),
       );
       return;
     }
-    setState(() => _loading = true);
+    setState(() => _booking = true);
 
     final auth = context.read<AuthService>();
     final headers = await auth.getAuthHeaders();
-    final d = _selectedDate;
-    final dateStr =
-        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final dateTime = _selectedSlot!['dateTime'] as String;
 
     try {
       final res = await http
@@ -53,14 +77,13 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
             headers: headers,
             body: jsonEncode({
               'doctorId': doctor.id,
-              'date': dateStr,
-              'time': _selectedTime,
+              'dateTime': dateTime,
             }),
           )
           .timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() => _booking = false);
 
       if (res.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -72,15 +95,22 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         context.go('/appointments');
       } else {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final msg = data['error'] ?? 'Erreur lors de la réservation';
+        final isConflict = res.statusCode == 409;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(data['error'] ?? 'Erreur lors de la réservation'),
+            content: Text(isConflict
+                ? 'Ce créneau n\'est plus disponible. Veuillez en choisir un autre.'
+                : msg),
+            backgroundColor: isConflict ? Colors.orange : Colors.redAccent,
+            duration: const Duration(seconds: 4),
           ),
         );
+        if (isConflict) _fetchSlots(); // Rafraîchir les créneaux
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() => _booking = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Connexion au serveur impossible')),
         );
@@ -99,9 +129,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       return Scaffold(
         appBar: AppBar(
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
-          ),
+              icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
           title: const Text('Rendez-vous'),
         ),
         body: const Center(child: Text('Médecin introuvable')),
@@ -114,9 +142,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
+            icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
         title: const Text('Prendre rendez-vous'),
       ),
       body: SingleChildScrollView(
@@ -132,35 +158,114 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
             const SizedBox(height: 28),
             _sectionTitle('Choisir un horaire', theme, isDark),
             const SizedBox(height: 12),
-            _timeSlotGrid(isDark),
+            _timeSlotArea(isDark),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _loading ? null : () => _confirm(doctor),
+                onPressed: _booking ? null : () => _confirm(doctor),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                      borderRadius: BorderRadius.circular(14)),
                 ),
-                child: _loading
+                child: _booking
                     ? const SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Text(
-                        'Confirmer le rendez-vous',
-                        style: TextStyle(fontSize: 16),
-                      ),
+                            color: Colors.white, strokeWidth: 2))
+                    : const Text('Confirmer le rendez-vous',
+                        style: TextStyle(fontSize: 16)),
               ),
             ),
             const SizedBox(height: 24),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _timeSlotArea(bool isDark) {
+    if (_slotsLoading) {
+      return const Center(
+          child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: CircularProgressIndicator(),
+      ));
+    }
+    if (_slots.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.event_busy_rounded,
+                  size: 40,
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+              const SizedBox(height: 10),
+              Text(
+                'Aucun créneau disponible ce jour.',
+                style: TextStyle(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight),
+              ),
+              const SizedBox(height: 4),
+              Text('Essayez une autre date.',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: _slots.map((slot) {
+        final time = slot['time'] as String? ?? '';
+        final isSelected = _selectedSlot != null &&
+            _selectedSlot!['dateTime'] == slot['dateTime'];
+
+        return GestureDetector(
+          onTap: () => setState(() => _selectedSlot = slot as Map<String, dynamic>),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 80,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppColors.primary
+                  : (isDark ? AppColors.cardDark : AppColors.cardLight),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.primary
+                    : isDark ? AppColors.borderDark : AppColors.borderLight,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                time,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected
+                      ? Colors.white
+                      : (isDark
+                          ? AppColors.textPrimaryDark
+                          : AppColors.textPrimaryLight),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -174,10 +279,9 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
           boxShadow: [
             if (!isDark)
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2)),
           ],
         ),
         child: Row(
@@ -185,11 +289,10 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: SizedBox(
-                width: 64,
-                height: 64,
-                child: doctor.photoUrl != null
-                    ? Image.network(doctor.photoUrl!,
-                        fit: BoxFit.cover,
+                width: 64, height: 64,
+                child: doctor.photoUrl != null &&
+                        !doctor.photoUrl!.startsWith('data:')
+                    ? Image.network(doctor.photoUrl!, fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => _avatarFallback())
                     : _avatarFallback(),
               ),
@@ -199,58 +302,37 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    doctor.fullName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
-                    ),
-                  ),
+                  Text(doctor.fullName,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight)),
                   const SizedBox(height: 4),
-                  Text(
-                    doctor.specialty,
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                      fontSize: 13,
-                    ),
-                  ),
+                  Text(doctor.specialty,
+                      style: TextStyle(
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                          fontSize: 13)),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.star_rounded,
-                          color: AppColors.star, size: 14),
+                      const Icon(Icons.star_rounded, color: AppColors.star, size: 14),
                       const SizedBox(width: 3),
-                      Text(
-                        doctor.rating.toStringAsFixed(1),
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: doctor.available
-                              ? AppColors.success.withValues(alpha: 0.12)
-                              : AppColors.error.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          doctor.available ? 'Disponible' : 'Indisponible',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: doctor.available
-                                ? AppColors.success
-                                : AppColors.error,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                      Text(doctor.rating.toStringAsFixed(1),
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      if (doctor.price != null && doctor.price! > 0) ...[
+                        const SizedBox(width: 10),
+                        Text('${doctor.price!.toStringAsFixed(0)} €',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight)),
+                      ],
                     ],
                   ),
                 ],
@@ -263,16 +345,13 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   Widget _avatarFallback() => Container(
         color: AppColors.primaryLight,
         child: const Center(
-            child: Icon(Icons.person_rounded,
-                color: AppColors.primary, size: 32)),
-      );
+            child: Icon(Icons.person_rounded, color: AppColors.primary, size: 32)));
 
   Widget _sectionTitle(String text, ThemeData theme, bool isDark) => Text(
         text,
         style: theme.textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.w700,
-          color:
-              isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+          color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
         ),
       );
 
@@ -289,7 +368,10 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
             const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
             return GestureDetector(
-              onTap: () => setState(() => _selectedDate = day),
+              onTap: () {
+                setState(() => _selectedDate = day);
+                _fetchSlots();
+              },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: 52,
@@ -302,86 +384,35 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                   border: Border.all(
                     color: isSelected
                         ? AppColors.primary
-                        : isDark
-                            ? AppColors.borderDark
-                            : AppColors.borderLight,
+                        : isDark ? AppColors.borderDark : AppColors.borderLight,
                   ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      dayNames[day.weekday % 7],
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isSelected
-                            ? Colors.white70
-                            : (isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight),
-                      ),
-                    ),
+                    Text(dayNames[day.weekday % 7],
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: isSelected
+                                ? Colors.white70
+                                : (isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight))),
                     const SizedBox(height: 4),
-                    Text(
-                      day.day.toString(),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: isSelected
-                            ? Colors.white
-                            : (isDark
-                                ? AppColors.textPrimaryDark
-                                : AppColors.textPrimaryLight),
-                      ),
-                    ),
+                    Text(day.day.toString(),
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: isSelected
+                                ? Colors.white
+                                : (isDark
+                                    ? AppColors.textPrimaryDark
+                                    : AppColors.textPrimaryLight))),
                   ],
                 ),
               ),
             );
           },
         ),
-      );
-
-  Widget _timeSlotGrid(bool isDark) => Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: _timeSlots.map((time) {
-          final isSelected = _selectedTime == time;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedTime = time),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 80,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.primary
-                    : (isDark ? AppColors.cardDark : AppColors.cardLight),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isSelected
-                      ? AppColors.primary
-                      : isDark
-                          ? AppColors.borderDark
-                          : AppColors.borderLight,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected
-                        ? Colors.white
-                        : (isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       );
 }

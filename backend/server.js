@@ -31,7 +31,7 @@ db.exec(`
     lastName  TEXT NOT NULL,
     email     TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password  TEXT NOT NULL,
-    role      TEXT DEFAULT 'patient' CHECK(role IN ('patient','admin')),
+    role      TEXT DEFAULT 'patient' CHECK(role IN ('patient','admin','doctor')),
     phone     TEXT,
     avatarUrl TEXT,
     createdAt TEXT DEFAULT (datetime('now'))
@@ -75,7 +75,31 @@ db.exec(`
                     CHECK(status IN ('confirmed','cancelled','completed')),
     createdAt       TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS doctor_availability (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    doctorId  INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+    dayOfWeek INTEGER NOT NULL CHECK(dayOfWeek BETWEEN 1 AND 7),
+    startHour INTEGER NOT NULL,
+    endHour   INTEGER NOT NULL,
+    UNIQUE(doctorId, dayOfWeek, startHour)
+  );
+
+  CREATE TABLE IF NOT EXISTS rpps_registry (
+    rppsNumber TEXT PRIMARY KEY,
+    firstName  TEXT NOT NULL,
+    lastName   TEXT NOT NULL,
+    specialty  TEXT NOT NULL
+  );
 `);
+
+// Migrations pour les colonnes ajoutées
+const _addCol = (table, col, def) => {
+  try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch (_) {}
+};
+_addCol('doctors', 'userId',     'INTEGER REFERENCES users(id)');
+_addCol('doctors', 'rppsNumber', 'TEXT');
+_addCol('doctors', 'isVerified', 'INTEGER DEFAULT 0');
 
 // MIDDLEWARES
 
@@ -116,7 +140,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 // POST
 app.post('/api/auth/register', async (req, res) => {
-  const { firstName, lastName, email, password, phone } = req.body;
+  const { firstName, lastName, email, password, phone, role, specialty, rppsNumber, avatarUrl } = req.body;
 
   if (!firstName || !lastName || !email || !password) {
     return res.status(400).json({ error: 'Tous les champs obligatoires doivent être remplis' });
@@ -125,25 +149,59 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères' });
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-  if (existing) {
-    return res.status(409).json({ error: 'Email déjà utilisé' });
+  const userRole = role === 'doctor' ? 'doctor' : 'patient';
+
+  if (userRole === 'doctor') {
+    if (!rppsNumber || !/^\d{11}$/.test(rppsNumber.trim())) {
+      return res.status(400).json({ error: 'Le numéro RPPS doit contenir exactement 11 chiffres' });
+    }
+    // Vérifier que le RPPS existe dans le registre national
+    const rppsEntry = db.prepare('SELECT * FROM rpps_registry WHERE rppsNumber = ?').get(rppsNumber.trim());
+    if (!rppsEntry) {
+      return res.status(400).json({
+        error: 'Numéro RPPS non reconnu dans le registre national. Vérifiez votre numéro ou contactez l\'ANS.',
+      });
+    }
+    // Vérifier qu'il n'est pas déjà utilisé
+    const existingRpps = db.prepare('SELECT id FROM doctors WHERE rppsNumber = ?').get(rppsNumber.trim());
+    if (existingRpps) return res.status(409).json({ error: 'Ce numéro RPPS est déjà associé à un compte' });
   }
 
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (existing) return res.status(409).json({ error: 'Email déjà utilisé' });
+
   const hashed = await bcrypt.hash(password, 12);
-  const result = db
-    .prepare('INSERT INTO users (firstName, lastName, email, password, phone) VALUES (?, ?, ?, ?, ?)')
-    .run(firstName, lastName, email, hashed, phone || null);
+
+  const registerTx = db.transaction(() => {
+    const userResult = db
+      .prepare('INSERT INTO users (firstName, lastName, email, password, role, phone, avatarUrl) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(firstName, lastName, email, hashed, userRole, phone || null, avatarUrl || null);
+
+    const userId = userResult.lastInsertRowid;
+
+    if (userRole === 'doctor') {
+      // Le RPPS est validé → isVerified = 1 automatiquement
+      const rppsEntry = db.prepare('SELECT * FROM rpps_registry WHERE rppsNumber = ?').get(rppsNumber.trim());
+      const docSpecialty = rppsEntry?.specialty || specialty || 'Médecin';
+      db.prepare(
+        'INSERT INTO doctors (firstName, lastName, specialty, userId, rppsNumber, isVerified) VALUES (?, ?, ?, ?, ?, 1)'
+      ).run(firstName, lastName, docSpecialty, userId, rppsNumber.trim());
+    }
+
+    return userId;
+  });
+
+  const userId = registerTx();
 
   const token = jwt.sign(
-    { id: result.lastInsertRowid, email, role: 'patient' },
+    { id: userId, email, role: userRole },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
 
   res.status(201).json({
     token,
-    user: { id: result.lastInsertRowid, firstName, lastName, email, role: 'patient' },
+    user: { id: userId, firstName, lastName, email, role: userRole },
   });
 });
 
@@ -182,6 +240,23 @@ app.get('/api/auth/me', authenticate, (req, res) => {
   res.json(user);
 });
 
+// PUT — mise à jour du profil patient
+app.put('/api/auth/profile', authenticate, (req, res) => {
+  const { firstName, lastName, phone, avatarUrl } = req.body;
+  db.prepare(`
+    UPDATE users SET
+      firstName = COALESCE(?, firstName),
+      lastName  = COALESCE(?, lastName),
+      phone     = COALESCE(?, phone),
+      avatarUrl = COALESCE(?, avatarUrl)
+    WHERE id = ?
+  `).run(firstName || null, lastName || null, phone || null, avatarUrl || null, req.user.id);
+  const user = db.prepare(
+    'SELECT id, firstName, lastName, email, role, phone, avatarUrl FROM users WHERE id = ?'
+  ).get(req.user.id);
+  res.json(user);
+});
+
 // PUT
 app.put('/api/users/avatar', authenticate, (req, res) => {
   const { avatarUrl } = req.body;
@@ -195,7 +270,9 @@ app.put('/api/users/avatar', authenticate, (req, res) => {
 // GET
 app.get('/api/doctors', authenticate, (req, res) => {
   const { specialty, search } = req.query;
-  let query = 'SELECT * FROM doctors WHERE isActive = 1';
+  // Patients voient uniquement les médecins vérifiés. Admin et doctors voient tout.
+  const verifiedOnly = req.user.role === 'patient';
+  let query = `SELECT * FROM doctors WHERE isActive = 1${verifiedOnly ? ' AND isVerified = 1' : ''}`;
   const params = [];
 
   if (specialty) {
@@ -221,61 +298,110 @@ app.get('/api/doctors/:id', authenticate, (req, res) => {
   res.json(doctor);
 });
 
-// GET
+// GET — créneaux d'un médecin (générés depuis ses disponibilités hebdomadaires)
 app.get('/api/doctors/:id/slots', authenticate, (req, res) => {
+  const doctorId = req.params.id;
   const { date } = req.query;
-  let query = `
-    SELECT * FROM time_slots
-    WHERE doctorId = ? AND isBooked = 0 AND dateTime > datetime('now')
-  `;
-  const params = [req.params.id];
 
-  if (date) {
-    query += ' AND date(dateTime) = date(?)';
-    params.push(date);
+  const availability = db.prepare(
+    'SELECT * FROM doctor_availability WHERE doctorId = ?'
+  ).all(doctorId);
+
+  // Si le médecin n'a pas défini de disponibilités, retourner les créneaux manuels
+  if (availability.length === 0) {
+    let q = `SELECT * FROM time_slots WHERE doctorId = ? AND isBooked = 0 AND dateTime > datetime('now')`;
+    const p = [doctorId];
+    if (date) { q += ' AND date(dateTime) = date(?)'; p.push(date); }
+    q += ' ORDER BY dateTime ASC';
+    return res.json(db.prepare(q).all(...p));
   }
 
-  query += ' ORDER BY dateTime ASC';
-  res.json(db.prepare(query).all(...params));
+  // Générer les créneaux de 30 min pour les 14 prochains jours
+  const slots = [];
+  const now = new Date();
+
+
+  const toDbDay = (jsDay) => jsDay === 0 ? 7 : jsDay;
+
+  for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() + dayOffset);
+    const dbDay = toDbDay(d.getDay());
+    const dateStr = d.toISOString().substring(0, 10);
+
+    // Filtrer sur la date demandée si précisée
+    if (date && dateStr !== date) continue;
+
+    const daySlots = availability.filter(a => a.dayOfWeek === dbDay);
+    for (const avail of daySlots) {
+      // Créneaux de 30 min
+      for (let h = avail.startHour; h < avail.endHour; h++) {
+        for (const min of [0, 30]) {
+          if (h === avail.endHour - 1 && min === 30) continue; // ne pas dépasser endHour
+          const timeStr = `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+          const dateTime = `${dateStr}T${timeStr}`;
+
+          // Ignorer les créneaux passés
+          if (new Date(dateTime) <= now) continue;
+
+          // Vérifier si ce créneau est déjà réservé dans appointments
+          const booked = db.prepare(
+            "SELECT id FROM appointments WHERE doctorId = ? AND dateTime = ? AND status = 'confirmed'"
+          ).get(doctorId, dateTime);
+
+          if (!booked) {
+            slots.push({ dateTime, time: timeStr, date: dateStr });
+          }
+        }
+      }
+    }
+  }
+
+  res.json(slots);
 });
 
-// APPOINTMENTS
 
-// POST /api/appointments
+
+
 app.post('/api/appointments', authenticate, (req, res) => {
-  const { doctorId, slotId, reason } = req.body;
+  const { doctorId, dateTime, slotId, reason } = req.body;
 
-  if (!doctorId || !slotId) {
-    return res.status(400).json({ error: 'doctorId et slotId sont requis' });
+  if (!doctorId || (!dateTime && !slotId)) {
+    return res.status(400).json({ error: 'doctorId et dateTime (ou slotId) sont requis' });
   }
 
-  const slot = db
-    .prepare('SELECT * FROM time_slots WHERE id = ? AND isBooked = 0')
-    .get(slotId);
-  if (!slot) return res.status(409).json({ error: 'Créneau indisponible ou déjà réservé' });
-
-  const doctor = db
-    .prepare('SELECT * FROM doctors WHERE id = ? AND isActive = 1')
-    .get(doctorId);
+  const doctor = db.prepare('SELECT * FROM doctors WHERE id = ? AND isActive = 1').get(doctorId);
   if (!doctor) return res.status(404).json({ error: 'Médecin introuvable' });
 
+
+  let finalDateTime = dateTime;
+  let resolvedSlotId = slotId || null;
+
+  if (!finalDateTime && slotId) {
+    const slot = db.prepare('SELECT * FROM time_slots WHERE id = ? AND isBooked = 0').get(slotId);
+    if (!slot) return res.status(409).json({ error: 'Créneau indisponible ou déjà réservé' });
+    finalDateTime = slot.dateTime;
+    resolvedSlotId = slot.id;
+  }
+
+  // Vérifier conflit (double réservation)
+  const conflict = db.prepare(
+    "SELECT id FROM appointments WHERE doctorId = ? AND dateTime = ? AND status = 'confirmed'"
+  ).get(doctorId, finalDateTime);
+  if (conflict) return res.status(409).json({ error: 'Ce créneau est déjà réservé' });
+
   const book = db.transaction(() => {
-    db.prepare('UPDATE time_slots SET isBooked = 1 WHERE id = ?').run(slotId);
-    return db
-      .prepare(
-        `INSERT INTO appointments
-          (patientId, doctorId, slotId, doctorName, doctorSpecialty, dateTime, reason)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        req.user.id,
-        doctorId,
-        slotId,
-        `${doctor.firstName} ${doctor.lastName}`,
-        doctor.specialty,
-        slot.dateTime,
-        reason || null
-      );
+    if (resolvedSlotId) {
+      db.prepare('UPDATE time_slots SET isBooked = 1 WHERE id = ?').run(resolvedSlotId);
+    }
+    return db.prepare(
+      `INSERT INTO appointments (patientId, doctorId, slotId, doctorName, doctorSpecialty, dateTime, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      req.user.id, doctorId, resolvedSlotId,
+      `${doctor.firstName} ${doctor.lastName}`,
+      doctor.specialty, finalDateTime, reason || null
+    );
   });
 
   const result = book();
@@ -314,7 +440,7 @@ app.put('/api/appointments/:id/cancel', authenticate, (req, res) => {
 // ADMIN
 
 // GET
-app.get('/api/admin/stats', authenticate, requireAdmin, (req, res) => {
+app.get('/api/admin/stats', authenticate, requireAdmin, (_, res) => {
   res.json({
     totalDoctors: db.prepare('SELECT COUNT(*) as n FROM doctors WHERE isActive = 1').get().n,
     totalPatients: db.prepare("SELECT COUNT(*) as n FROM users WHERE role = 'patient'").get().n,
@@ -387,9 +513,121 @@ app.delete('/api/admin/doctors/:id', authenticate, requireAdmin, (req, res) => {
   res.json({ message: 'Médecin désactivé' });
 });
 
+// GET — médecins en attente de vérification
+app.get('/api/admin/pending-doctors', authenticate, requireAdmin, (_, res) => {
+  res.json(db.prepare('SELECT * FROM doctors WHERE isVerified = 0 AND isActive = 1 ORDER BY createdAt DESC').all());
+});
+
+// PUT — vérifier un médecin
+app.put('/api/admin/doctors/:id/verify', authenticate, requireAdmin, (req, res) => {
+  const result = db.prepare('UPDATE doctors SET isVerified = 1 WHERE id = ?').run(req.params.id);
+  if (result.changes === 0) return res.status(404).json({ error: 'Médecin introuvable' });
+  res.json(db.prepare('SELECT * FROM doctors WHERE id = ?').get(req.params.id));
+});
+
+// PORTAIL MÉDECIN
+
+function requireDoctor(req, res, next) {
+  if (req.user.role !== 'doctor') {
+    return res.status(403).json({ error: 'Accès réservé aux médecins' });
+  }
+  next();
+}
+
+// GET — profil du médecin connecté
+app.get('/api/doctor/me', authenticate, requireDoctor, (req, res) => {
+  const doctor = db.prepare('SELECT * FROM doctors WHERE userId = ? AND isActive = 1').get(req.user.id);
+  if (!doctor) return res.status(404).json({ error: 'Profil médecin introuvable' });
+  res.json(doctor);
+});
+
+// PUT — mettre à jour son profil
+app.put('/api/doctor/me', authenticate, requireDoctor, (req, res) => {
+  const doctor = db.prepare('SELECT id FROM doctors WHERE userId = ?').get(req.user.id);
+  if (!doctor) return res.status(404).json({ error: 'Profil médecin introuvable' });
+
+  const { description, address, city, phone, avatarUrl, price } = req.body;
+  db.prepare(`
+    UPDATE doctors SET
+      description = COALESCE(?, description),
+      address     = COALESCE(?, address),
+      city        = COALESCE(?, city),
+      phone       = COALESCE(?, phone),
+      avatarUrl   = COALESCE(?, avatarUrl),
+      price       = COALESCE(?, price)
+    WHERE id = ?
+  `).run(description, address, city, phone, avatarUrl, price, doctor.id);
+
+  // Sync avatarUrl dans users aussi
+  if (avatarUrl) db.prepare('UPDATE users SET avatarUrl = ? WHERE id = ?').run(avatarUrl, req.user.id);
+
+  res.json(db.prepare('SELECT * FROM doctors WHERE id = ?').get(doctor.id));
+});
+
+// GET — rendez-vous du médecin (aujourd'hui + à venir)
+app.get('/api/doctor/appointments', authenticate, requireDoctor, (req, res) => {
+  const doctor = db.prepare('SELECT id FROM doctors WHERE userId = ?').get(req.user.id);
+  if (!doctor) return res.status(404).json({ error: 'Profil médecin introuvable' });
+
+  const { filter } = req.query; // 'today' | 'upcoming' | all (default)
+  let query = `
+    SELECT a.*, u.firstName as patientFirstName, u.lastName as patientLastName, u.phone as patientPhone
+    FROM appointments a
+    JOIN users u ON u.id = a.patientId
+    WHERE a.doctorId = ? AND a.status = 'confirmed'
+  `;
+  const params = [doctor.id];
+
+  if (filter === 'today') {
+    query += " AND date(a.dateTime) = date('now')";
+  } else if (filter === 'upcoming') {
+    query += " AND a.dateTime > datetime('now')";
+  }
+
+  query += ' ORDER BY a.dateTime ASC';
+  res.json(db.prepare(query).all(...params));
+});
+
+// GET — disponibilités du médecin
+app.get('/api/doctor/availability', authenticate, requireDoctor, (req, res) => {
+  const doctor = db.prepare('SELECT id FROM doctors WHERE userId = ?').get(req.user.id);
+  if (!doctor) return res.status(404).json({ error: 'Profil médecin introuvable' });
+  res.json(db.prepare('SELECT * FROM doctor_availability WHERE doctorId = ? ORDER BY dayOfWeek, startHour').all(doctor.id));
+});
+
+// POST — définir ses disponibilités
+app.post('/api/doctor/availability', authenticate, requireDoctor, (req, res) => {
+  const doctor = db.prepare('SELECT id FROM doctors WHERE userId = ?').get(req.user.id);
+  if (!doctor) return res.status(404).json({ error: 'Profil médecin introuvable' });
+
+  const { slots } = req.body; 
+  if (!Array.isArray(slots)) return res.status(400).json({ error: 'slots doit être un tableau' });
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM doctor_availability WHERE doctorId = ?').run(doctor.id);
+    const insert = db.prepare(
+      'INSERT INTO doctor_availability (doctorId, dayOfWeek, startHour, endHour) VALUES (?, ?, ?, ?)'
+    );
+    for (const s of slots) {
+      if (s.dayOfWeek >= 1 && s.dayOfWeek <= 7 && s.startHour < s.endHour) {
+        insert.run(doctor.id, s.dayOfWeek, s.startHour, s.endHour);
+      }
+    }
+  })();
+
+  res.status(201).json({ message: 'Disponibilités enregistrées' });
+});
+
+// GET — disponibilités d'un médecin (pour le patient)
+app.get('/api/doctors/:id/availability', authenticate, (req, res) => {
+  res.json(
+    db.prepare('SELECT * FROM doctor_availability WHERE doctorId = ? ORDER BY dayOfWeek, startHour').all(req.params.id)
+  );
+});
+
 // DÉMARRAGE
 
 app.listen(PORT, () => {
-  console.log(`✅ Carely API démarrée sur http://localhost:${PORT}`);
+  console.log(` Carely API démarrée sur http://localhost:${PORT}`);
   console.log(`   GET http://localhost:${PORT}/health`);
 });

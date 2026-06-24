@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'core/database/database_helper.dart';
 import 'core/providers/consultant_provider.dart';
@@ -11,23 +12,28 @@ import 'core/theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseHelper.init();
+
+  final authService = AuthService();
+  final router = AppRouter.createRouter(authService);
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider.value(value: authService),
         ChangeNotifierProvider(
           lazy: false,
           create: (_) => ConsultantProvider(ConsultantRepository()),
         ),
       ],
-      child: const CarelyApp(),
+      child: CarelyApp(router: router),
     ),
   );
 }
 
 class CarelyApp extends StatelessWidget {
-  const CarelyApp({super.key});
+  final GoRouter router;
+  const CarelyApp({super.key, required this.router});
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +44,7 @@ class CarelyApp extends StatelessWidget {
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: themeProvider.themeMode,
-        routerConfig: AppRouter.router,
+        routerConfig: router,
       ),
     );
   }

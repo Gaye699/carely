@@ -11,16 +11,63 @@ class AdminScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthService>().currentUser;
+    final adminName = user != null
+        ? '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim()
+        : 'Administrateur';
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go('/'),
+          automaticallyImplyLeading: false,
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          title: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Administration', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                    Text(adminName, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white38),
+                ),
+                child: const Text('ADMIN', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.logout, color: Colors.white, size: 20),
+                tooltip: 'Se déconnecter',
+                onPressed: () async {
+                  await context.read<AuthService>().logout();
+                  if (context.mounted) context.go('/login');
+                },
+              ),
+            ],
           ),
-          title: const Text('Administration'),
           bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            indicatorColor: Colors.white,
             tabs: [
               Tab(text: 'Médecins'),
               Tab(text: 'Statistiques'),
@@ -228,7 +275,7 @@ class _AddDoctorFormState extends State<_AddDoctorForm> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _specialty,
+              initialValue: _specialty,
               decoration: const InputDecoration(labelText: 'Spécialité'),
               items: _specialties
                   .map((s) => DropdownMenuItem(value: s, child: Text(s)))
@@ -426,8 +473,9 @@ class _StatsTabState extends State<_StatsTab> {
       Uri.parse('${AuthService.baseUrl}/admin/stats'),
       headers: headers,
     );
-    if (res.statusCode == 200 && mounted)
+    if (res.statusCode == 200 && mounted) {
       setState(() => _stats = jsonDecode(res.body));
+    }
   }
 
   @override

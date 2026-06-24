@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import '../../core/models/consultant.dart';
 import '../../core/providers/consultant_provider.dart';
@@ -15,6 +17,42 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String? _selectedDomain;
+  Map<String, dynamic>? _nextAppointment;
+  bool _loadingAppt = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNextAppointment();
+  }
+
+  Future<void> _loadNextAppointment() async {
+    final auth = context.read<AuthService>();
+    final headers = await auth.getAuthHeaders();
+    try {
+      final res = await http
+          .get(Uri.parse('${AuthService.baseUrl}/appointments/mine'), headers: headers)
+          .timeout(const Duration(seconds: 5));
+      if (!mounted) return;
+      if (res.statusCode == 200) {
+        final list = jsonDecode(res.body) as List;
+        final now = DateTime.now();
+        final upcoming = list.where((a) {
+          final dt = (a as Map<String, dynamic>)['dateTime'] as String? ?? '';
+          final parsed = DateTime.tryParse(dt);
+          return parsed != null && parsed.isAfter(now) && a['status'] == 'confirmed';
+        }).toList();
+        setState(() {
+          _nextAppointment = upcoming.isNotEmpty ? upcoming.first as Map<String, dynamic> : null;
+          _loadingAppt = false;
+        });
+      } else {
+        if (mounted) setState(() => _loadingAppt = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingAppt = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,15 +71,14 @@ class _HomeScreenState extends State<HomeScreen> {
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
-              child: _header(
-                  context, isDark, consultantProvider.allConsultants.length),
+              child: _header(context, isDark, consultantProvider.allConsultants.length),
             ),
             SliverToBoxAdapter(child: _searchBar(context)),
             SliverToBoxAdapter(child: _chips(isDark)),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: _upcomingCard(),
+                child: _upcomingCard(isDark),
               ),
             ),
             SliverToBoxAdapter(
@@ -53,9 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       'Médecins populaires',
                       style: theme.textTheme.headlineSmall?.copyWith(
-                        color: isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight,
+                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                       ),
                     ),
                     TextButton(
@@ -70,9 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  ),
+                  child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                 ),
               )
             else if (filtered.isEmpty)
@@ -82,8 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Center(
                     child: Text(
                       'Aucun médecin dans cette spécialité',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: AppColors.grey),
+                      style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.grey),
                     ),
                   ),
                 ),
@@ -92,8 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                 sliver: SliverGrid(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
@@ -112,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Header ────────────────────────────────────────────────────────────
+  // ── Header avec avatar ────────────────────────────────────────────────
 
   Widget _header(BuildContext context, bool isDark, int count) => Container(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -128,15 +159,8 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.person_rounded,
-                      color: Colors.white, size: 24),
+                Consumer<AuthService>(
+                  builder: (_, auth, _) => _userAvatar(auth),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -146,15 +170,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(
                         'Bonjour,',
                         style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 13),
+                            color: Colors.white.withValues(alpha: 0.8), fontSize: 13),
                       ),
                       Consumer<AuthService>(
-                        builder: (context, auth, child) {
+                        builder: (_, auth, _) {
                           final user = auth.currentUser;
                           final name = user != null
-                              ? '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'
-                                  .trim()
+                              ? '${user['firstName'] ?? ''} ${user['lastName'] ?? ''}'.trim()
                               : '';
                           return Text(
                             name.isNotEmpty ? name : 'Utilisateur',
@@ -173,9 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 8),
                 Consumer<ThemeProvider>(
                   builder: (_, tp, _) => _iconBtn(
-                    tp.isDark
-                        ? Icons.light_mode_rounded
-                        : Icons.dark_mode_rounded,
+                    tp.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                     onTap: tp.toggle,
                   ),
                 ),
@@ -185,10 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text(
               'Trouvez votre\nmédecin idéal',
               style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                height: 1.3,
+                color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, height: 1.3,
               ),
             ),
             const SizedBox(height: 4),
@@ -201,11 +218,30 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
+  Widget _userAvatar(AuthService auth) {
+    final url = auth.currentUser?['avatarUrl'];
+    if (url != null && url.startsWith('data:')) {
+      final b64 = url.split(',').last;
+      return CircleAvatar(
+        radius: 22,
+        backgroundColor: Colors.white.withValues(alpha: 0.2),
+        backgroundImage: MemoryImage(base64Decode(b64)),
+      );
+    }
+    return Container(
+      width: 44, height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Icon(Icons.person_rounded, color: Colors.white, size: 24),
+    );
+  }
+
   Widget _iconBtn(IconData icon, {VoidCallback? onTap}) => GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 40,
-          height: 40,
+          width: 40, height: 40,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
@@ -224,16 +260,14 @@ class _HomeScreenState extends State<HomeScreen> {
             child: TextField(
               decoration: InputDecoration(
                 hintText: 'Rechercher un médecin…',
-                prefixIcon:
-                    const Icon(Icons.search_rounded, color: AppColors.grey),
+                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.grey),
                 suffixIcon: Container(
                   margin: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.tune_rounded,
-                      color: Colors.white, size: 18),
+                  child: const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
                 ),
               ),
             ),
@@ -241,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  // ── Domain chips with icons ───────────────────────────────────────────
+  // ── Domain chips ──────────────────────────────────────────────────────
 
   Widget _chips(bool isDark) => SizedBox(
         height: 92,
@@ -249,12 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
           children: [
-            _iconChip(
-              label: 'Tous',
-              icon: Icons.apps_rounded,
-              domain: null,
-              isDark: isDark,
-            ),
+            _iconChip(label: 'Tous', icon: Icons.apps_rounded, domain: null, isDark: isDark),
             ...ConsultantDomain.all.map(
               (d) => Padding(
                 padding: const EdgeInsets.only(left: 14),
@@ -284,54 +313,38 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: 52,
-            height: 52,
+            width: 52, height: 52,
             decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.primary
-                  : (isDark ? AppColors.cardDark : AppColors.grey50),
+              color: selected ? AppColors.primary : (isDark ? AppColors.cardDark : AppColors.grey50),
               shape: BoxShape.circle,
               border: Border.all(
-                color: selected
-                    ? AppColors.primary
-                    : isDark
-                        ? AppColors.borderDark
-                        : AppColors.borderLight,
+                color: selected ? AppColors.primary : isDark ? AppColors.borderDark : AppColors.borderLight,
               ),
             ),
-            child: Icon(
-              icon,
-              color: selected
-                  ? Colors.white
-                  : (isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.primary),
-              size: 22,
-            ),
+            child: Icon(icon,
+                color: selected ? Colors.white : (isDark ? AppColors.textSecondaryDark : AppColors.primary),
+                size: 22),
           ),
           const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight:
-                  selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected
-                  ? AppColors.primary
-                  : isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-            ),
-          ),
+          Text(label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected
+                    ? AppColors.primary
+                    : isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+              )),
         ],
       ),
     );
   }
 
-  // ── Upcoming appointment card ──────────────────────────────────────────
+  // ── Prochain RDV (dynamique) ──────────────────────────────────────────
 
-  Widget _upcomingCard() => Container(
-        padding: const EdgeInsets.all(16),
+  Widget _upcomingCard(bool isDark) {
+    if (_loadingAppt) {
+      return Container(
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: AppColors.cardGradient,
           borderRadius: BorderRadius.circular(20),
@@ -343,69 +356,142 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.calendar_today_rounded,
-                    color: Colors.white, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  'Prochain rendez-vous',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 13),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.person_rounded,
-                      color: Colors.white, size: 26),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Dr. Thomas Dupont',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600),
-                      ),
-                      SizedBox(height: 2),
-                      Text('Cardiologue',
-                          style:
-                              TextStyle(color: Colors.white70, fontSize: 13)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Divider(color: Colors.white24, height: 1),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _info(Icons.calendar_today_outlined, 'Mer. 22 mai 2024'),
-                const SizedBox(width: 20),
-                _info(Icons.access_time_rounded, '14h30'),
-              ],
-            ),
-          ],
+        child: const Center(
+          child: SizedBox(
+            width: 24, height: 24,
+            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+          ),
         ),
       );
+    }
+
+    if (_nextAppointment == null) {
+      return GestureDetector(
+        onTap: () => context.go('/search'),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: AppColors.cardGradient,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.3),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.calendar_today_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Aucun rendez-vous à venir',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                    SizedBox(height: 4),
+                    Text('Touchez pour trouver un médecin',
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 16),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final appt = _nextAppointment!;
+    final dt = appt['dateTime'] as String? ?? '';
+    final date = dt.length >= 10 ? dt.substring(0, 10) : '';
+    final time = dt.length >= 16 ? dt.substring(11, 16) : '';
+    final doctorName = appt['doctorName'] as String? ?? '';
+    final specialty = appt['doctorSpecialty'] as String? ?? '';
+
+    final parts = date.split('-');
+    const months = ['', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+    final m = parts.length >= 2 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    final day = parts.length >= 3 ? parts[2] : '';
+    final year = parts.isNotEmpty ? parts[0] : '';
+    final monthStr = m > 0 && m < months.length ? months[m] : '';
+    final formattedDate = '$day $monthStr $year'.trim();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: AppColors.cardGradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_rounded, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text('Prochain rendez-vous',
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.person_rounded, color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      doctorName.startsWith('Dr.') ? doctorName : 'Dr. $doctorName',
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(specialty, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(color: Colors.white24, height: 1),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _info(Icons.calendar_today_outlined, formattedDate),
+              const SizedBox(width: 20),
+              _info(Icons.access_time_rounded, time),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _info(IconData icon, String text) => Row(
         children: [
@@ -413,16 +499,13 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 5),
           Text(text,
               style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500)),
+                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
         ],
       );
 
   // ── Doctor card (grid) ────────────────────────────────────────────────
 
-  Widget _doctorCard(Consultant c, ThemeData theme, bool isDark) =>
-      GestureDetector(
+  Widget _doctorCard(Consultant c, ThemeData theme, bool isDark) => GestureDetector(
         onTap: () => context.push('/doctor/${c.id}'),
         child: Container(
           padding: const EdgeInsets.all(12),
@@ -430,8 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
             color: isDark ? AppColors.cardDark : AppColors.cardLight,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isDark ? AppColors.borderDark : AppColors.borderLight,
-            ),
+                color: isDark ? AppColors.borderDark : AppColors.borderLight),
             boxShadow: [
               if (!isDark)
                 BoxShadow(
@@ -450,8 +532,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _photo(c.photoUrl),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: c.available
                           ? AppColors.success.withValues(alpha: 0.1)
@@ -463,9 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.w700,
-                        color: c.available
-                            ? AppColors.success
-                            : AppColors.error,
+                        color: c.available ? AppColors.success : AppColors.error,
                       ),
                     ),
                   ),
@@ -477,9 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
-                  color: isDark
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textPrimaryLight,
+                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -489,9 +566,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 c.specialty,
                 style: TextStyle(
                   fontSize: 11,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -499,17 +574,14 @@ class _HomeScreenState extends State<HomeScreen> {
               const Spacer(),
               Row(
                 children: [
-                  const Icon(Icons.star_rounded,
-                      color: AppColors.star, size: 13),
+                  const Icon(Icons.star_rounded, color: AppColors.star, size: 13),
                   const SizedBox(width: 3),
                   Text(
                     c.rating.toStringAsFixed(1),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
+                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                     ),
                   ),
                 ],
@@ -522,11 +594,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _photo(String? url) => ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
-          width: 52,
-          height: 52,
+          width: 52, height: 52,
           child: url != null
-              ? Image.network(url,
-                  fit: BoxFit.cover,
+              ? Image.network(url, fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => _avatarFallback())
               : _avatarFallback(),
         ),
@@ -535,7 +605,5 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _avatarFallback() => Container(
         color: AppColors.primaryLight,
         child: const Center(
-            child:
-                Icon(Icons.person_rounded, color: AppColors.primary, size: 28)),
-      );
+            child: Icon(Icons.person_rounded, color: AppColors.primary, size: 28)));
 }

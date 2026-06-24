@@ -44,7 +44,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen>
       final headers = await auth.getAuthHeaders();
       final res = await http
           .get(
-            Uri.parse('${AuthService.baseUrl}/appointments'),
+            Uri.parse('${AuthService.baseUrl}/appointments/mine'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 10));
@@ -104,8 +104,8 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen>
     if (confirm != true) return;
 
     final headers = await auth.getAuthHeaders();
-    final res = await http.delete(
-      Uri.parse('${AuthService.baseUrl}/appointments/${appt.id}'),
+    final res = await http.put(
+      Uri.parse('${AuthService.baseUrl}/appointments/${appt.id}/cancel'),
       headers: headers,
     );
 
@@ -176,8 +176,8 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen>
                           controller: _tabController,
                           children: [
                             _appointmentList(
-                              _filterByStatus('scheduled'),
-                              status: 'scheduled',
+                              _filterByStatus('confirmed'),
+                              status: 'confirmed',
                               isDark: isDark,
                             ),
                             _appointmentList(
@@ -365,7 +365,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen>
                 ),
               ],
             ),
-            if (status == 'scheduled') ...[
+            if (status == 'confirmed') ...[
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -460,7 +460,7 @@ class _MyAppointmentsScreenState extends State<MyAppointmentsScreen>
             ),
           ),
           const SizedBox(height: 20),
-          if (status == 'scheduled')
+          if (status == 'confirmed')
             ElevatedButton.icon(
               onPressed: () => context.go('/search'),
               icon: const Icon(Icons.search_rounded, size: 18),

@@ -5,7 +5,7 @@ class Appointment {
   final String doctorSpecialty;
   final String date;
   final String time;
-  final String status; // 'scheduled' | 'completed' | 'cancelled'
+  final String status;
 
   const Appointment({
     required this.id,
@@ -23,28 +23,27 @@ class Appointment {
 
     if (map['doctor'] is Map) {
       final d = map['doctor'] as Map<String, dynamic>;
-      final fn = d['firstName'] as String? ?? '';
-      final ln = d['lastName'] as String? ?? '';
-      doctorName = 'Dr. $fn $ln'.trim();
+      doctorName = 'Dr. ${d['firstName'] ?? ''} ${d['lastName'] ?? ''}'.trim();
       doctorSpecialty = d['specialty'] as String? ?? '';
     } else {
-      final fn = map['doctorFirstName'] as String? ??
-          map['firstName'] as String? ?? '';
-      final ln = map['doctorLastName'] as String? ??
-          map['lastName'] as String? ?? '';
-      doctorName = 'Dr. $fn $ln'.trim();
-      doctorSpecialty = map['doctorSpecialty'] as String? ??
-          map['specialty'] as String? ?? '';
+      final raw = map['doctorName'] as String? ?? '';
+      doctorName = raw.startsWith('Dr.') ? raw : 'Dr. $raw';
+      doctorSpecialty = map['doctorSpecialty'] as String? ?? map['specialty'] as String? ?? '';
     }
 
+    // Le backend renvoie "dateTime" au format ISO "2024-06-17T09:00"
+    final rawDt = map['dateTime'] as String? ?? map['date'] as String? ?? '';
+    final date = rawDt.length >= 10 ? rawDt.substring(0, 10) : rawDt;
+    final time = rawDt.length >= 16 ? rawDt.substring(11, 16) : (map['time'] as String? ?? '');
+
     return Appointment(
-      id: map['id'] as int,
-      doctorId: (map['doctorId'] ?? map['doctor_id']) as int,
+      id: (map['id'] as num).toInt(),
+      doctorId: ((map['doctorId'] ?? map['doctor_id']) as num? ?? 0).toInt(),
       doctorName: doctorName,
       doctorSpecialty: doctorSpecialty,
-      date: map['date'] as String? ?? '',
-      time: map['time'] as String? ?? '',
-      status: map['status'] as String? ?? 'scheduled',
+      date: date,
+      time: time,
+      status: map['status'] as String? ?? 'confirmed',
     );
   }
 

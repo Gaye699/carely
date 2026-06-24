@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -19,13 +20,14 @@ class ProfileScreen extends StatelessWidget {
     final fullName = '$firstName $lastName'.trim();
     final email = user?['email'] ?? '';
     final initials = _initials(firstName, lastName);
+    final avatarUrl = user?['avatarUrl'];
 
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             children: [
-              _header(fullName, email, initials, isDark),
+              _header(fullName, email, initials, avatarUrl, isDark),
               const SizedBox(height: 12),
               _menuSection(context, isDark),
               const SizedBox(height: 24),
@@ -42,10 +44,33 @@ class ProfileScreen extends StatelessWidget {
     return '$f$l'.isNotEmpty ? '$f$l' : '?';
   }
 
+  Widget _buildAvatar(String? avatarUrl, String initials) {
+    ImageProvider? img;
+    if (avatarUrl != null && avatarUrl.startsWith('data:')) {
+      img = MemoryImage(base64Decode(avatarUrl.split(',').last));
+    }
+    return CircleAvatar(
+      radius: 40,
+      backgroundColor: Colors.white.withValues(alpha: 0.25),
+      backgroundImage: img,
+      child: img == null
+          ? Text(
+              initials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          : null,
+    );
+  }
+
   Widget _header(
     String name,
     String email,
     String initials,
+    String? avatarUrl,
     bool isDark,
   ) =>
       Container(
@@ -60,25 +85,7 @@ class ProfileScreen extends StatelessWidget {
         ),
         child: Column(
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.25),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white38, width: 2),
-              ),
-              child: Center(
-                child: Text(
-                  initials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
+            _buildAvatar(avatarUrl, initials),
             const SizedBox(height: 14),
             Text(
               name.isNotEmpty ? name : 'Utilisateur',
@@ -106,9 +113,7 @@ class ProfileScreen extends StatelessWidget {
               icon: Icons.person_outline_rounded,
               label: 'Modifier le profil',
               isDark: isDark,
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Fonctionnalité à venir')),
-              ),
+              onTap: () => context.push('/profile/edit'),
             ),
             _menuItem(
               context,
@@ -256,8 +261,12 @@ class ProfileScreen extends StatelessWidget {
     );
 
     if (confirm == true) {
-      await auth.logout();
-      if (context.mounted) context.go('/login');
+      // Defer au frame suivant : la Future de showDialog se résout pendant que
+      // le Navigator est encore verrouillé (_debugLocked). En différant,
+      // le verrou est relâché avant que notifyListeners() déclenche GoRouter.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await auth.logout();
+      });
     }
   }
 }

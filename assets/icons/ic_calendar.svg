@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" height="24" width="24">
+  <g id="calendar-month-view-monthly">
+    <path id="Union" fill="#000000" d="M8 4h8V2h2v2h3v18H3V4h3V2h2zM5 20h14V10H5zm6.999 -3.6963 1.4278 -4.4521h2.0263V18.25h-1.5469v-1.4941l0.1504 -3.0606 -1.5478 4.5547h-1.0195l-1.54887 -4.5547 0.15137 3.0606V18.25H8.54883v-6.3984h2.02147zM5 8h14V6H5z" stroke-width="1"></path>
+  </g>
+</svg>

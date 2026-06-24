@@ -10,7 +10,8 @@ class DatabaseHelper {
   static Database? _db;
 
   static Future<void> init() async {
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
@@ -56,14 +57,17 @@ class DatabaseHelper {
     final now = DateTime.now().toIso8601String();
     final batch = db.batch();
     for (final row in _seedData) {
-      batch.insert('consultants', {...row, 'created_at': now, 'updated_at': now});
+      batch.insert('consultants', {
+        ...row,
+        'created_at': now,
+        'updated_at': now,
+      });
     }
     await batch.commit(noResult: true);
   }
 
-  // 30 entries across all 10 domains — varied ratings & availability
   static const _seedData = [
-    // ── Médecine générale (5) ──────────────────────────────────────────
+    // ── Médecine générale (5)
     {
       'full_name': 'Dr. Sophie Martin',
       'specialty': 'Médecin généraliste',
@@ -114,7 +118,7 @@ class DatabaseHelper {
       'rating': 4.3,
       'available': 1,
     },
-    // ── Cardiologie (4) ───────────────────────────────────────────────
+    // Cardiologie (4)
     {
       'full_name': 'Dr. Thomas Dupont',
       'specialty': 'Cardiologue',

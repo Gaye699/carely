@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/consultant.dart';
 import '../../core/providers/consultant_provider.dart';
@@ -200,9 +201,13 @@ class _SearchScreenState extends State<SearchScreen> {
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
             itemCount: provider.consultants.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (_, i) => ConsultantCard(
-              consultant: provider.consultants[i],
-            ),
+            itemBuilder: (_, i) {
+              final c = provider.consultants[i];
+              return ConsultantCard(
+                consultant: c,
+                onTap: () => context.push('/doctor/${c.id}'),
+              );
+            },
           );
         },
       );

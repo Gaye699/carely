@@ -13,8 +13,6 @@ class ThemeProvider extends ChangeNotifier {
     _load();
   }
 
-  // _load() is async so notifyListeners() fires only after the await,
-  // i.e., outside any build() — no assertion risk here.
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     _isDark = prefs.getBool(_key) ?? false;
@@ -23,8 +21,6 @@ class ThemeProvider extends ChangeNotifier {
 
   Future<void> toggle() async {
     _isDark = !_isDark;
-    // Notify before the await so the UI updates immediately on the tap frame,
-    // not after the SharedPreferences write completes.
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_key, _isDark);

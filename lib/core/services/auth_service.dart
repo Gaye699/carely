@@ -1,18 +1,16 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'
+    show kIsWeb, kDebugMode, ChangeNotifier;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 class AuthService extends ChangeNotifier {
   static const _storage = FlutterSecureStorage();
 
-  // En dev local : changer selon l'appareil utilisé
-  // Emulateur Android  → http://10.0.2.2:3000/api
-  // Simulateur iOS     → http://localhost:3000/api
-  // Téléphone physique → http://TON_IP_LOCAL:3000/api  (ex: 192.168.1.42)
-  // Production Railway → https://carely-backend.up.railway.app/api
   static String get baseUrl {
-    if (kDebugMode) return 'http://10.0.2.2:3000/api';
+    if (kDebugMode) {
+      return kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api';
+    }
     return 'https://carely-backend.up.railway.app/api';
   }
 
@@ -96,39 +94,86 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  bool get isDoctor => _currentUser?['role'] == 'doctor';
+
   Future<bool> register({
     required String firstName,
     required String lastName,
     required String email,
     required String password,
+    String role = 'patient',
+    String? specialty,
+    String? rppsNumber,
+    String? avatarUrl,
   }) async {
     _setLoading(true);
     try {
+      final body = <String, dynamic>{
+        'firstName': firstName.trim(),
+        'lastName': lastName.trim(),
+        'email': email.trim().toLowerCase(),
+        'password': password,
+        'role': role,
+      };
+      if (specialty != null) body['specialty'] = specialty;
+      if (rppsNumber != null) body['rppsNumber'] = rppsNumber;
+      if (avatarUrl != null) body['avatarUrl'] = avatarUrl;
+
       final res = await http
           .post(
             Uri.parse('$baseUrl/auth/register'),
             headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'firstName': firstName.trim(),
-              'lastName': lastName.trim(),
-              'email': email.trim().toLowerCase(),
-              'password': password,
-            }),
+            body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 10));
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode == 201) {
+        // Pour les médecins non vérifiés, on sauvegarde quand même la session
         await _saveSession(data);
         _setLoading(false);
         return true;
       }
-      _error = data['error'] ?? 'Erreur lors de l\'inscription';
+      _error = data['error'] ?? "Erreur lors de l'inscription";
       _setLoading(false);
       return false;
     } catch (_) {
       _error = 'Connexion impossible. Réessayez.';
       _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> updateProfile({
+    String? firstName,
+    String? lastName,
+    String? phone,
+    String? avatarUrl,
+  }) async {
+    try {
+      final headers = await getAuthHeaders();
+      final body = <String, dynamic>{};
+      if (firstName != null) body['firstName'] = firstName;
+      if (lastName != null) body['lastName'] = lastName;
+      if (phone != null) body['phone'] = phone;
+      if (avatarUrl != null) body['avatarUrl'] = avatarUrl;
+
+      final res = await http
+          .put(
+            Uri.parse('$baseUrl/auth/profile'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        _currentUser = _toStringMap(data);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (_) {
       return false;
     }
   }

@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 class ConsultantDomain {
   ConsultantDomain._();
 
@@ -38,7 +40,50 @@ class ConsultantDomain {
     gynecology: 'Gynécologie',
   };
 
+  static const Map<String, String> shortLabels = {
+    general: 'Généraliste',
+    cardiology: 'Cardio',
+    dermatology: 'Dermato',
+    neurology: 'Neuro',
+    pediatrics: 'Pédiatre',
+    orthopedics: 'Ortho',
+    ophthalmology: 'Ophtalmo',
+    psychiatry: 'Psy',
+    dental: 'Dentiste',
+    gynecology: 'Gynéco',
+  };
+
+  static const Map<String, IconData> icons = {
+    general: Icons.local_hospital_rounded,
+    cardiology: Icons.favorite_rounded,
+    dermatology: Icons.face_rounded,
+    neurology: Icons.psychology_rounded,
+    pediatrics: Icons.child_care_rounded,
+    orthopedics: Icons.accessibility_new_rounded,
+    ophthalmology: Icons.visibility_rounded,
+    psychiatry: Icons.self_improvement_rounded,
+    dental: Icons.medical_services_rounded,
+    gynecology: Icons.pregnant_woman_rounded,
+  };
+
   static String label(String domain) => labels[domain] ?? domain;
+  static String shortLabel(String domain) => shortLabels[domain] ?? labels[domain] ?? domain;
+  static IconData icon(String domain) => icons[domain] ?? Icons.local_hospital_rounded;
+
+  static String fromSpecialty(String specialty) {
+    final s = specialty.toLowerCase();
+    if (s.contains('généraliste') || s.contains('generaliste') || s.contains('général')) return general;
+    if (s.contains('cardio')) return cardiology;
+    if (s.contains('dermato')) return dermatology;
+    if (s.contains('neuro')) return neurology;
+    if (s.contains('pédiat') || s.contains('pediat')) return pediatrics;
+    if (s.contains('orthop')) return orthopedics;
+    if (s.contains('ophtalmo') || s.contains('ophthal')) return ophthalmology;
+    if (s.contains('psychiatr') || s.contains('psy')) return psychiatry;
+    if (s.contains('dentiste') || s.contains('dentist')) return dental;
+    if (s.contains('gynéco') || s.contains('gyneco')) return gynecology;
+    return general;
+  }
 }
 
 class Consultant {
@@ -51,6 +96,9 @@ class Consultant {
   final String? photoUrl;
   final double rating;
   final bool available;
+  final String? description;
+  final double? price;
+  final String? city;
   final String? createdAt;
   final String? updatedAt;
 
@@ -64,10 +112,14 @@ class Consultant {
     this.photoUrl,
     this.rating = 0.0,
     this.available = true,
+    this.description,
+    this.price,
+    this.city,
     this.createdAt,
     this.updatedAt,
   });
 
+  // From local SQLite
   factory Consultant.fromMap(Map<String, dynamic> map) => Consultant(
         id: map['id'] as int?,
         fullName: map['full_name'] as String,
@@ -81,6 +133,28 @@ class Consultant {
         createdAt: map['created_at'] as String?,
         updatedAt: map['updated_at'] as String?,
       );
+
+  // From backend API
+  factory Consultant.fromApiMap(Map<String, dynamic> map) {
+    final firstName = map['firstName'] as String? ?? '';
+    final lastName = map['lastName'] as String? ?? '';
+    final specialty = map['specialty'] as String? ?? '';
+    final isActive = map['isActive'];
+
+    return Consultant(
+      id: map['id'] as int?,
+      fullName: 'Dr. $firstName $lastName'.trim(),
+      specialty: specialty,
+      domain: ConsultantDomain.fromSpecialty(specialty),
+      phone: map['phone'] as String?,
+      photoUrl: map['avatarUrl'] as String?,
+      rating: (map['rating'] as num?)?.toDouble() ?? 4.5,
+      available: isActive == null || isActive == 1 || isActive == true,
+      description: map['description'] as String?,
+      price: (map['price'] as num?)?.toDouble(),
+      city: map['city'] as String?,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,

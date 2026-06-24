@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../home/home_screen.dart';
+import '../../core/theme/app_colors.dart';
 
 class MainScreen extends StatelessWidget {
   final Widget child;
@@ -34,25 +36,57 @@ class MainScreen extends StatelessWidget {
               context.go('/profile');
           }
         },
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
+            icon: SvgPicture.asset(
+              'assets/icons/ic_home.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.grey, BlendMode.srcIn),
+            ),
+            activeIcon: SvgPicture.asset(
+              'assets/icons/ic_home.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.primary, BlendMode.srcIn),
+            ),
             label: 'Accueil',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.search_outlined),
-            activeIcon: Icon(Icons.search),
+            icon: SvgPicture.asset(
+              'assets/icons/ic_search.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.grey, BlendMode.srcIn),
+            ),
+            activeIcon: SvgPicture.asset(
+              'assets/icons/ic_search.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.primary, BlendMode.srcIn),
+            ),
             label: 'Recherche',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
+            icon: SvgPicture.asset(
+              'assets/icons/ic_calendar.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.grey, BlendMode.srcIn),
+            ),
+            activeIcon: SvgPicture.asset(
+              'assets/icons/ic_calendar.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.primary, BlendMode.srcIn),
+            ),
             label: 'Mes RDV',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
+            icon: SvgPicture.asset(
+              'assets/icons/ic_profile.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.grey, BlendMode.srcIn),
+            ),
+            activeIcon: SvgPicture.asset(
+              'assets/icons/ic_profile.svg',
+              width: 24,
+              colorFilter: ColorFilter.mode(AppColors.primary, BlendMode.srcIn),
+            ),
             label: 'Profil',
           ),
         ],
